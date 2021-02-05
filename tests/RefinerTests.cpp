@@ -1,7 +1,6 @@
 #include <MeshReader.h>
 #include <Refiner.h>
 #include <gtest/gtest.h>
-#include <vtkPolyDataMapper.h>
 #include <vtkSimplePointsReader.h>
 
 TEST(Refiner, Test) {
