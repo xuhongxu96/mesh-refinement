@@ -2,6 +2,7 @@
 #include <Refiner.h>
 #include <vtkActor.h>
 #include <vtkCellPicker.h>
+#include <vtkOBJWriter.h>
 #include <vtkDataSetMapper.h>
 #include <vtkExtractSelection.h>
 #include <vtkIdTypeArray.h>
@@ -99,13 +100,20 @@ int main() {
   point_reader->Update();
 
   mr::MeshReader mesh_reader;
-  mr::Mesh mesh = mesh_reader.Read(DATA_PATH "original.mesh");
+  auto mesh = mesh_reader.Read(DATA_PATH "original.mesh");
 
   mr::Refiner refiner(point_reader->GetOutput());
-  auto own_colors = refiner.Refine(mesh.poly_data);
+  auto refined_mesh = refiner.Refine(mesh);
 
   vtkNew<vtkPolyDataMapper> mapper;
-  mapper->SetInputData(mesh.poly_data);
+  mapper->SetInputData(refined_mesh);
+
+  /*
+  vtkNew<vtkOBJWriter> writer;
+  writer->SetFileName("out.obj");
+  writer->SetInputData(refined_mesh);
+  writer->Update();
+*/
 
   vtkNew<vtkActor> actor;
   actor->SetMapper(mapper);

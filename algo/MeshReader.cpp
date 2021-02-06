@@ -1,20 +1,24 @@
 #include "MeshReader.h"
 
+#include <vtkCellData.h>
+#include <vtkUnsignedCharArray.h>
+
 #include <fstream>
 #include <sstream>
 #include <string>
 
 namespace mr {
 
-Mesh MeshReader::Read(const std::string& path) const {
+vtkNew<vtkPolyData> MeshReader::Read(const std::string& path) const {
   using namespace std::string_literals;
 
-  Mesh res;
+  vtkNew<vtkPolyData> res;
 
   std::ifstream ifs(path);
 
   // read points
   {
+    vtkNew<vtkPoints> points;
     uint32_t point_count;
     std::string utm_mode;
     ifs >> point_count >> utm_mode;
@@ -32,12 +36,15 @@ Mesh MeshReader::Read(const std::string& path) const {
                                  std::to_string(id));
       }
 
-      res.points->InsertNextPoint(x, y, z);
+      points->InsertNextPoint(x, y, z);
     }
+
+    res->SetPoints(points);
   }
 
   // read strips
   {
+    vtkNew<vtkCellArray> strips;
     uint32_t strip_count;
     int max_nodes, strip_type;
     ifs >> strip_count >> max_nodes >> strip_type;
@@ -57,15 +64,25 @@ Mesh MeshReader::Read(const std::string& path) const {
                                  std::to_string(id));
       }
 
-      res.strips->InsertNextCell(3);
-      res.strips->InsertCellPoint(p0 - 1);
-      res.strips->InsertCellPoint(p1 - 1);
-      res.strips->InsertCellPoint(p2 - 1);
+      strips->InsertNextCell(3);
+      strips->InsertCellPoint(p0 - 1);
+      strips->InsertCellPoint(p1 - 1);
+      strips->InsertCellPoint(p2 - 1);
+
+      res->SetPolys(strips);
     }
   }
 
-  res.poly_data->SetPoints(res.points);
-  res.poly_data->SetStrips(res.strips);
+  vtkNew<vtkUnsignedCharArray> colors;
+  colors->SetNumberOfComponents(3);
+  colors->SetNumberOfTuples(res->GetNumberOfCells());
+
+  for (size_t i = 0; i < res->GetNumberOfCells(); ++i) {
+    float rgb[3] = {100, 0, 0};
+    colors->InsertTuple(i, rgb);
+  }
+
+  res->GetCellData()->SetScalars(colors);
 
   return res;
 }
