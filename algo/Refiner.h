@@ -10,9 +10,12 @@
 namespace mr {
 
 struct RefinerConfig {
-  int refine_times = 1;
-  double radius = 100.0;
-  double delta_z_threshold = 5;
+  int refine_times = 2;
+  double judge_radius = 80.0;
+  double sample_radius = 50.0;
+  int idw_p = 2;
+  double delta_z_threshold = 8;
+  double original_z_weight = 0.8;
 };
 
 class Refiner {
@@ -38,9 +41,11 @@ class Refiner {
                             vtkIdType p2, vtkIntArray* edge_data,
                             vtkIdList* cell_ids);
 
-  static vtkIdType InterpolatePosition(vtkPoints* input_points,
-                                       vtkPoints* output_points,
-                                       vtkIdList* stencil, double* weights);
+  vtkIdType InterpolatePosition(vtkPoints* input_points,
+                                vtkPoints* output_points, vtkIdList* stencil,
+                                double* weights) const;
+
+  double GetInterpolatedZFromHighResData(double* x) const;
 
   void GenerateSubdivisionPoints(vtkPolyData* input_ds,
                                  vtkEdgeTable* edge_table,

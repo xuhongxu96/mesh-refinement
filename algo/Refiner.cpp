@@ -10,6 +10,8 @@
 
 namespace mr {
 
+static constexpr double EPISILON = 0.001;
+
 Refiner::Refiner(vtkPolyData* high_res_points, RefinerConfig config)
     : high_res_points_{high_res_points}, config_{config} {
   locator_->SetDataSet(high_res_points);
@@ -102,19 +104,54 @@ vtkIdType Refiner::FindEdge(vtkPolyData* mesh, vtkIdType cell_id, vtkIdType p1,
 
 vtkIdType Refiner::InterpolatePosition(vtkPoints* input_points,
                                        vtkPoints* output_points,
-                                       vtkIdList* stencil, double* weights) {
+                                       vtkIdList* stencil,
+                                       double* weights) const {
   double x[3] = {0., 0., 0.};
 
   for (vtkIdType i = 0; i < stencil->GetNumberOfIds(); ++i) {
     double input_x[3];
     input_points->GetPoint(stencil->GetId(i), input_x);
     for (int j = 0; j < 3; ++j) {
-      // TODO: re-calc z
       x[j] += input_x[j] * weights[i];
     }
   }
 
+  double expected_z = GetInterpolatedZFromHighResData(x);
+  if (expected_z > EPISILON) {
+    assert(abs(expected_z - x[2]) < 20);
+
+    x[2] = (x[2] * config_.original_z_weight +
+            expected_z * (1 - config_.original_z_weight));
+  }
+
   return output_points->InsertNextPoint(x);
+}
+
+double Refiner::GetInterpolatedZFromHighResData(double* x) const {
+  double expected_z = 0;
+  double sum = 0.;
+  vtkNew<vtkIdList> point_ids_in_radius;
+  locator_->FindPointsWithinRadius(config_.sample_radius, x,
+                                   point_ids_in_radius);
+  if (point_ids_in_radius->GetNumberOfIds() > 0) {
+    for (auto point_id_in_radius : *point_ids_in_radius) {
+      double p[3];
+      high_res_points_->GetPoint(point_id_in_radius, p);
+      double d =
+          sqrt((p[0] - x[0]) * (p[0] - x[0]) + (p[1] - x[1]) * (p[1] - x[1]));
+
+      if (d < EPISILON) continue;
+
+      double d_p = pow(d, config_.idw_p);
+
+      expected_z += p[2] / d_p;
+      sum += 1. / d_p;
+    }
+
+    expected_z /= sum;
+  }
+
+  return expected_z;
 }
 
 void Refiner::GenerateSubdivisionPoints(vtkPolyData* input_ds,
@@ -308,7 +345,8 @@ vtkNew<vtkIdList> Refiner::FindPointsToRefine(vtkPolyData* mesh) const {
     points->GetPoint(i, p);
 
     vtkNew<vtkIdList> point_ids_in_radius;
-    locator_->FindPointsWithinRadius(config_.radius, p, point_ids_in_radius);
+    locator_->FindPointsWithinRadius(config_.judge_radius, p,
+                                     point_ids_in_radius);
 
     for (vtkIdType j = 0; j < point_ids_in_radius->GetNumberOfIds(); ++j) {
       double p_in_radius[3];
