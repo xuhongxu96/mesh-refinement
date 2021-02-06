@@ -10,11 +10,29 @@
 namespace mr {
 
 struct RefinerConfig {
+  //! @brief 细分次数（每次都会将需要细分的三角形在各边中点处细分）
   int refine_times = 2;
+
+  //! @brief 判断是否需要细分的半径（以当前判断的点为中心）
   double judge_radius = 80.0;
-  double sample_radius = 50.0;
-  int idw_p = 2;
+
+  //! @brief z值差阈值
+  //!
+  //! 如果存在一个judge_radius半径内的点，
+  //! 其z值与判断中心点的差值超过该阈值，
+  //! 则需要细分与该判断中心点相关联的三角形
   double delta_z_threshold = 8;
+
+  //! @brief 为插值点计算z值时，从点数据集中采样的半径（以插值点为中心）
+  double sample_radius = 50.0;
+
+  //! @brief IDW算法的p指数参数（通过点数据集为插值点计算z值时，采用IDW算法）
+  int idw_p = 2;
+
+  //! @brief 网格线性插值计算z值的比重
+  //!
+  //! 为插值点计算z值时，会将通过点数据集计算的IDW插值结果与其在网格内线性插值计算的结果进行平均。
+  //! 该参数决定了其在网格内线性插值计算的结果的比重。
   double original_z_weight = 0.8;
 };
 
