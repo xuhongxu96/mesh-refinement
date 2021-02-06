@@ -34,6 +34,7 @@ vtkNew<vtkPolyData> Refiner::Refine(vtkPolyData* mesh) const {
         FindUniqueCellsByPoints(input_ds, point_ids_to_refine);
 
     vtkNew<vtkPoints> output_points;
+    output_points->SetDataTypeToDouble();
     output_points->GetData()->DeepCopy(input_ds->GetPoints()->GetData());
 
     vtkNew<vtkPointData> output_pd;

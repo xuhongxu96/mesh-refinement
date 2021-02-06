@@ -2,12 +2,14 @@
 
 #include <vtkPolyData.h>
 
-#include <string_view>
+#include <iostream>
+#include <string>
 
 namespace mr {
 
 class MeshReader {
  public:
+  vtkNew<vtkPolyData> Read(std::istream& is) const;
   vtkNew<vtkPolyData> Read(const std::string& path) const;
 };
 

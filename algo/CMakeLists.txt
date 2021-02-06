@@ -9,6 +9,8 @@ find_package(VTK COMPONENTS
 add_library(algo STATIC
     MeshReader.h
     MeshReader.cpp
+    MeshWriter.h
+    MeshWriter.cpp
     Refiner.h
     Refiner.cpp
 )

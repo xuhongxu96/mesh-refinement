@@ -1,4 +1,5 @@
 #include <MeshReader.h>
+#include <MeshWriter.h>
 #include <Refiner.h>
 #include <vtkActor.h>
 #include <vtkCellPicker.h>
@@ -105,10 +106,13 @@ int main() {
   vtkNew<vtkPolyDataMapper> mapper;
   mapper->SetInputData(refined_mesh);
 
-  vtkNew<vtkOBJWriter> writer;
-  writer->SetFileName("out.obj");
-  writer->SetInputData(refined_mesh);
-  writer->Update();
+  mr::MeshWriter writer;
+  writer.Write("out.mesh", refined_mesh);
+
+  vtkNew<vtkOBJWriter> obj_writer;
+  obj_writer->SetFileName("out.obj");
+  obj_writer->SetInputData(refined_mesh);
+  obj_writer->Update();
 
   vtkNew<vtkActor> actor;
   actor->SetMapper(mapper);
