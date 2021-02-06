@@ -9,8 +9,8 @@ TEST(Refiner, Test) {
   reader->Update();
 
   mr::MeshReader mesh_reader;
-  mr::Mesh mesh = mesh_reader.Read(DATA_PATH "original.mesh");
+  auto mesh = mesh_reader.Read(DATA_PATH "original.mesh");
 
   mr::Refiner refiner(reader->GetOutput());
-  refiner.Refine(mesh.poly_data);
+  refiner.Refine(mesh);
 }

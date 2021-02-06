@@ -2,12 +2,12 @@
 #include <Refiner.h>
 #include <vtkActor.h>
 #include <vtkCellPicker.h>
-#include <vtkOBJWriter.h>
 #include <vtkDataSetMapper.h>
 #include <vtkExtractSelection.h>
 #include <vtkIdTypeArray.h>
 #include <vtkInteractorStyleTerrain.h>
 #include <vtkInteractorStyleTrackballCamera.h>
+#include <vtkOBJWriter.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkProperty.h>
 #include <vtkRenderWindow.h>
@@ -37,9 +37,6 @@ class MouseInteractorStyle : public vtkInteractorStyleTerrain {
     std::cout << "Cell id is: " << picker->GetCellId() << std::endl;
 
     if (picker->GetCellId() != -1) {
-      std::cout << "Pick position is: " << worldPosition[0] << " "
-                << worldPosition[1] << " " << worldPosition[2] << endl;
-
       vtkNew<vtkIdTypeArray> ids;
 
       ids->SetNumberOfComponents(1);
@@ -108,12 +105,10 @@ int main() {
   vtkNew<vtkPolyDataMapper> mapper;
   mapper->SetInputData(refined_mesh);
 
-  /*
   vtkNew<vtkOBJWriter> writer;
   writer->SetFileName("out.obj");
   writer->SetInputData(refined_mesh);
   writer->Update();
-*/
 
   vtkNew<vtkActor> actor;
   actor->SetMapper(mapper);
@@ -125,9 +120,9 @@ int main() {
   renderWindow->AddRenderer(renderer);
   renderWindow->SetWindowName("Mesh Refinement");
 
-  vtkNew<vtkInteractorStyleTerrain> style;
-  // style->SetDefaultRenderer(renderer);
-  // style->Data = mesh.poly_data;
+  vtkNew<MouseInteractorStyle> style;
+  style->SetDefaultRenderer(renderer);
+  style->Data = refined_mesh;
 
   vtkNew<vtkRenderWindowInteractor> renderWindowInteractor;
   renderWindowInteractor->SetRenderWindow(renderWindow);
