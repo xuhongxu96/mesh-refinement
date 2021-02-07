@@ -1,4 +1,4 @@
-#include "MeshWriter.h"
+#include "GRDWriter.h"
 
 #include <vtkFeatureEdges.h>
 #include <vtkIdFilter.h>
@@ -9,9 +9,7 @@
 
 namespace mr {
 
-static constexpr auto delimiter = " ";
-
-void MeshWriter::Write(std::ostream& os, vtkPolyData* mesh) const {
+void GRDWriter::Write(std::ostream& os, vtkPolyData* mesh) const {
   auto n_points = mesh->GetNumberOfPoints();
   auto n_cells = mesh->GetNumberOfCells();
 
@@ -41,22 +39,14 @@ void MeshWriter::Write(std::ostream& os, vtkPolyData* mesh) const {
   os.precision(8);
   os.setf(std::ios::fixed);
 
-  os << n_points << delimiter << "NON-UTM" << std::endl;
+  os << n_cells << "  " << n_points << std::endl;
 
   for (vtkIdType i = 0; i < n_points; ++i) {
     double p[3];
     mesh->GetPoint(i, p);
 
-    int boundary_code = 0;
-    if (boundary_point_id_set.find(i) != boundary_point_id_set.end()) {
-      boundary_code = 1;
-    }
-
-    os << i + 1 << delimiter << p[0] << delimiter << p[1] << delimiter << p[2]
-       << delimiter << boundary_code << std::endl;
+    os << i + 1 << " " << p[0] << " " << p[1] << "  " << p[2] << std::endl;
   }
-
-  os << n_cells << delimiter << 3 << delimiter << 21 << delimiter << std::endl;
 
   for (vtkIdType i = 0; i < n_cells; ++i) {
     vtkIdType n_pt;
@@ -64,12 +54,12 @@ void MeshWriter::Write(std::ostream& os, vtkPolyData* mesh) const {
     mesh->GetCellPoints(i, n_pt, point_ids);
     if (n_pt != 3) throw std::runtime_error("Only support triangles");
 
-    os << i + 1 << delimiter << point_ids[0] + 1 << delimiter
-       << point_ids[1] + 1 << delimiter << point_ids[2] + 1 << std::endl;
+    os << i + 1 << "\t" << 3 << " " << point_ids[0] + 1 << " "
+       << point_ids[1] + 1 << " " << point_ids[2] + 1 << std::endl;
   }
 }
 
-void MeshWriter::Write(const std::string& path, vtkPolyData* mesh) const {
+void GRDWriter::Write(const std::string& path, vtkPolyData* mesh) const {
   std::ofstream ofs(path);
   Write(ofs, mesh);
 }

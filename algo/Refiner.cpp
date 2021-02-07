@@ -6,6 +6,7 @@
 #include <vtkIntArray.h>
 #include <vtkPointData.h>
 #include <vtkPointInterpolator.h>
+#include <vtkTriangle.h>
 #include <vtkUnsignedCharArray.h>
 
 namespace mr {
@@ -321,7 +322,7 @@ void Refiner::GenerateSubdivisionCells(vtkPolyData* input_ds,
 }
 
 vtkNew<vtkIdList> Refiner::FindUniqueCellsByPoints(vtkPolyData* mesh,
-                                                   vtkIdList* point_ids) {
+                                                   vtkIdList* point_ids) const {
   vtkNew<vtkIdList> res;
 
   for (vtkIdType point_id : *point_ids) {
@@ -329,7 +330,20 @@ vtkNew<vtkIdList> Refiner::FindUniqueCellsByPoints(vtkPolyData* mesh,
     mesh->GetPointCells(point_id, cell_ids);
 
     for (vtkIdType j = 0; j < cell_ids->GetNumberOfIds(); ++j) {
-      res->InsertUniqueId(cell_ids->GetId(j));
+      vtkIdType cell_id = cell_ids->GetId(j);
+
+      vtkIdType n_points;
+      const vtkIdType* cell_point_ids;
+      mesh->GetCellPoints(cell_id, n_points, cell_point_ids);
+      if (n_points != 3) throw std::runtime_error("Only support triangles");
+
+      double p[3][3];
+      for (int i = 0; i < 3; ++i) mesh->GetPoint(cell_point_ids[i], p[i]);
+      auto area = vtkTriangle::TriangleArea(p[0], p[1], p[2]);
+
+      if (area >= config_.min_triangle_area) {
+        res->InsertUniqueId(cell_id);
+      }
     }
   }
 

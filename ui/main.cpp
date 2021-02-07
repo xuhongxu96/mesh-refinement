@@ -1,3 +1,4 @@
+#include <GRDWriter.h>
 #include <MeshReader.h>
 #include <MeshWriter.h>
 #include <Refiner.h>
@@ -106,8 +107,15 @@ int main() {
   vtkNew<vtkPolyDataMapper> mapper;
   mapper->SetInputData(refined_mesh);
 
-  mr::MeshWriter writer;
-  writer.Write("out.mesh", refined_mesh);
+  {
+    mr::MeshWriter writer;
+    writer.Write("out.mesh", refined_mesh);
+  }
+
+  {
+    mr::GRDWriter writer;
+    writer.Write("out.grd", refined_mesh);
+  }
 
   vtkNew<vtkOBJWriter> obj_writer;
   obj_writer->SetFileName("out.obj");

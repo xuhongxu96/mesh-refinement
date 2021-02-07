@@ -13,6 +13,10 @@ add_library(algo STATIC
     MeshWriter.cpp
     Refiner.h
     Refiner.cpp
+    GRDWriter.h
+    GRDWriter.cpp
+    IDW.h
+    IDW.cpp
 )
 
 target_include_directories(algo PUBLIC .)

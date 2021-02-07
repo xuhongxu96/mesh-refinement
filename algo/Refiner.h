@@ -14,17 +14,22 @@ struct RefinerConfig {
   int refine_times = 2;
 
   //! @brief 判断是否需要细分的半径（以当前判断的点为中心）
-  double judge_radius = 80.0;
+  double judge_radius = 20.0;
+
+  //! @brief 细分后的三角形最小面积
+  //!
+  //! 面积小于该面积的三角形将不再细分
+  double min_triangle_area = 50.0;
 
   //! @brief z值差阈值
   //!
   //! 如果存在一个judge_radius半径内的点，
   //! 其z值与判断中心点的差值超过该阈值，
   //! 则需要细分与该判断中心点相关联的三角形
-  double delta_z_threshold = 8;
+  double delta_z_threshold = 2;
 
   //! @brief 为插值点计算z值时，从点数据集中采样的半径（以插值点为中心）
-  double sample_radius = 50.0;
+  double sample_radius = 20.0;
 
   //! @brief IDW算法的p指数参数（通过点数据集为插值点计算z值时，采用IDW算法）
   int idw_p = 2;
@@ -33,7 +38,7 @@ struct RefinerConfig {
   //!
   //! 为插值点计算z值时，会将通过点数据集计算的IDW插值结果与其在网格内线性插值计算的结果进行平均。
   //! 该参数决定了其在网格内线性插值计算的结果的比重。
-  double original_z_weight = 0.8;
+  double original_z_weight = 0.;
 };
 
 class Refiner {
@@ -77,8 +82,8 @@ class Refiner {
                                 vtkCellArray* output_cells,
                                 vtkCellData* output_cd) const;
 
-  static vtkNew<vtkIdList> FindUniqueCellsByPoints(vtkPolyData* mesh,
-                                                   vtkIdList* point_ids);
+  vtkNew<vtkIdList> FindUniqueCellsByPoints(vtkPolyData* mesh,
+                                            vtkIdList* point_ids) const;
 
   vtkNew<vtkIdList> FindPointsToRefine(vtkPolyData* mesh) const;
 };
