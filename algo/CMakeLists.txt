@@ -7,16 +7,24 @@ find_package(VTK COMPONENTS
 )
 
 add_library(algo STATIC
-    MeshReader.h
-    MeshReader.cpp
-    MeshWriter.h
-    MeshWriter.cpp
-    Refiner.h
-    Refiner.cpp
-    GRDWriter.h
-    GRDWriter.cpp
-    IDW.h
-    IDW.cpp
+    RefineJudger.h
+    RefineJudger.cpp
+
+    interpolaters/IDW.h
+    interpolaters/IDW.cpp
+
+    refiners/IRefiner.h
+    refiners/InterpolateRefiner.h
+    refiners/InterpolateRefiner.cpp
+    refiners/DelaunayRefiner.h
+    refiners/DelaunayRefiner.cpp
+
+    io/MeshReader.h
+    io/MeshReader.cpp
+    io/MeshWriter.h
+    io/MeshWriter.cpp
+    io/GRDWriter.h
+    io/GRDWriter.cpp
 )
 
 target_include_directories(algo PUBLIC .)

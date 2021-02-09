@@ -1,7 +1,6 @@
 #include "MeshReader.h"
 
 #include <vtkCellData.h>
-#include <vtkUnsignedCharArray.h>
 
 #include <fstream>
 #include <sstream>
@@ -71,17 +70,6 @@ vtkNew<vtkPolyData> MeshReader::Read(std::istream& is) const {
       res->SetPolys(strips);
     }
   }
-
-  vtkNew<vtkUnsignedCharArray> colors;
-  colors->SetNumberOfComponents(3);
-  colors->SetNumberOfTuples(res->GetNumberOfCells());
-
-  for (size_t i = 0; i < res->GetNumberOfCells(); ++i) {
-    float rgb[3] = {100, 0, 0};
-    colors->InsertTuple(i, rgb);
-  }
-
-  res->GetCellData()->SetScalars(colors);
 
   return res;
 }

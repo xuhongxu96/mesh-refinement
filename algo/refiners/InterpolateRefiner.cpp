@@ -1,4 +1,4 @@
-#include "Refiner.h"
+#include "InterpolateRefiner.h"
 
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
@@ -11,15 +11,13 @@
 
 namespace mr {
 
-static constexpr double EPISILON = 0.001;
+InterpolateRefiner::InterpolateRefiner(
+    std::shared_ptr<IInterpolater> interpolater,
+    InterpolateRefinerConfig config)
+    : interpolater_{interpolater}, config_{std::move(config)} {}
 
-Refiner::Refiner(vtkPolyData* high_res_points, RefinerConfig config)
-    : high_res_points_{high_res_points}, config_{config} {
-  locator_->SetDataSet(high_res_points);
-  locator_->BuildLocator();
-}
-
-vtkNew<vtkPolyData> Refiner::Refine(vtkPolyData* mesh) const {
+vtkNew<vtkPolyData> InterpolateRefiner::Refine(
+    vtkPolyData* mesh, vtkIdList* cell_ids_to_refine) const {
   vtkPolyData* input_ds = vtkPolyData::New();
 
   input_ds->CopyStructure(mesh);
@@ -29,10 +27,6 @@ vtkNew<vtkPolyData> Refiner::Refine(vtkPolyData* mesh) const {
   for (int level = 0; level < config_.refine_times; ++level) {
     input_ds->BuildLinks();
     vtkIdType n_cells = input_ds->GetNumberOfCells();
-
-    vtkNew<vtkIdList> point_ids_to_refine = FindPointsToRefine(input_ds);
-    vtkNew<vtkIdList> cell_ids_to_refine =
-        FindUniqueCellsByPoints(input_ds, point_ids_to_refine);
 
     vtkNew<vtkPoints> output_points;
     output_points->SetDataTypeToDouble();
@@ -81,9 +75,10 @@ vtkNew<vtkPolyData> Refiner::Refine(vtkPolyData* mesh) const {
   return res;
 }
 
-vtkIdType Refiner::FindEdge(vtkPolyData* mesh, vtkIdType cell_id, vtkIdType p1,
-                            vtkIdType p2, vtkIntArray* edge_data,
-                            vtkIdList* cell_ids) {
+vtkIdType InterpolateRefiner::FindEdge(vtkPolyData* mesh, vtkIdType cell_id,
+                                       vtkIdType p1, vtkIdType p2,
+                                       vtkIntArray* edge_data,
+                                       vtkIdList* cell_ids) {
   mesh->GetCellEdgeNeighbors(cell_id, p1, p2, cell_ids);
 
   for (vtkIdType i = 0; i < cell_ids->GetNumberOfIds(); ++i) {
@@ -104,10 +99,10 @@ vtkIdType Refiner::FindEdge(vtkPolyData* mesh, vtkIdType cell_id, vtkIdType p1,
   throw std::runtime_error("Edge should be found");
 }
 
-vtkIdType Refiner::InterpolatePosition(vtkPoints* input_points,
-                                       vtkPoints* output_points,
-                                       vtkIdList* stencil,
-                                       double* weights) const {
+vtkIdType InterpolateRefiner::InterpolatePosition(vtkPoints* input_points,
+                                                  vtkPoints* output_points,
+                                                  vtkIdList* stencil,
+                                                  double* weights) const {
   double x[3] = {0., 0., 0.};
 
   for (vtkIdType i = 0; i < stencil->GetNumberOfIds(); ++i) {
@@ -118,8 +113,8 @@ vtkIdType Refiner::InterpolatePosition(vtkPoints* input_points,
     }
   }
 
-  double expected_z = GetInterpolatedZFromHighResData(x);
-  if (expected_z > EPISILON) {
+  double expected_z = interpolater_->GetValue(x);
+  if (expected_z > 0) {
     assert(abs(expected_z - x[2]) < 20);
 
     x[2] = (x[2] * config_.original_z_weight +
@@ -129,39 +124,10 @@ vtkIdType Refiner::InterpolatePosition(vtkPoints* input_points,
   return output_points->InsertNextPoint(x);
 }
 
-double Refiner::GetInterpolatedZFromHighResData(double* x) const {
-  double expected_z = 0;
-  double sum = 0.;
-  vtkNew<vtkIdList> point_ids_in_radius;
-  locator_->FindPointsWithinRadius(config_.sample_radius, x,
-                                   point_ids_in_radius);
-  if (point_ids_in_radius->GetNumberOfIds() > 0) {
-    for (auto point_id_in_radius : *point_ids_in_radius) {
-      double p[3];
-      high_res_points_->GetPoint(point_id_in_radius, p);
-      double d =
-          sqrt((p[0] - x[0]) * (p[0] - x[0]) + (p[1] - x[1]) * (p[1] - x[1]));
-
-      if (d < EPISILON) continue;
-
-      double d_p = pow(d, config_.idw_p);
-
-      expected_z += p[2] / d_p;
-      sum += 1. / d_p;
-    }
-
-    expected_z /= sum;
-  }
-
-  return expected_z;
-}
-
-void Refiner::GenerateSubdivisionPoints(vtkPolyData* input_ds,
-                                        vtkEdgeTable* edge_table,
-                                        vtkIntArray* edge_data,
-                                        vtkPoints* output_points,
-                                        vtkPointData* output_pd,
-                                        vtkIdList* cell_ids_to_refine) const {
+void InterpolateRefiner::GenerateSubdivisionPoints(
+    vtkPolyData* input_ds, vtkEdgeTable* edge_table, vtkIntArray* edge_data,
+    vtkPoints* output_points, vtkPointData* output_pd,
+    vtkIdList* cell_ids_to_refine) const {
   static double weights[2] = {.5, .5};
   vtkIdType n_cells = input_ds->GetNumberOfCells();
 
@@ -218,11 +184,9 @@ void Refiner::GenerateSubdivisionPoints(vtkPolyData* input_ds,
   }
 }
 
-void Refiner::GenerateSubdivisionCells(vtkPolyData* input_ds,
-                                       vtkEdgeTable* edge_table,
-                                       vtkIntArray* edge_data,
-                                       vtkCellArray* output_cells,
-                                       vtkCellData* output_cd) const {
+void InterpolateRefiner::GenerateSubdivisionCells(
+    vtkPolyData* input_ds, vtkEdgeTable* edge_table, vtkIntArray* edge_data,
+    vtkCellArray* output_cells, vtkCellData* output_cd) const {
   vtkIdType n_cells = input_ds->GetNumberOfCells();
 
   vtkCellData* input_cd = input_ds->GetCellData();
@@ -320,62 +284,4 @@ void Refiner::GenerateSubdivisionCells(vtkPolyData* input_ds,
     }
   }
 }
-
-vtkNew<vtkIdList> Refiner::FindUniqueCellsByPoints(vtkPolyData* mesh,
-                                                   vtkIdList* point_ids) const {
-  vtkNew<vtkIdList> res;
-
-  for (vtkIdType point_id : *point_ids) {
-    vtkNew<vtkIdList> cell_ids;
-    mesh->GetPointCells(point_id, cell_ids);
-
-    for (vtkIdType j = 0; j < cell_ids->GetNumberOfIds(); ++j) {
-      vtkIdType cell_id = cell_ids->GetId(j);
-
-      vtkIdType n_points;
-      const vtkIdType* cell_point_ids;
-      mesh->GetCellPoints(cell_id, n_points, cell_point_ids);
-      if (n_points != 3) throw std::runtime_error("Only support triangles");
-
-      double p[3][3];
-      for (int i = 0; i < 3; ++i) mesh->GetPoint(cell_point_ids[i], p[i]);
-      auto area = vtkTriangle::TriangleArea(p[0], p[1], p[2]);
-
-      if (area >= config_.min_triangle_area) {
-        res->InsertUniqueId(cell_id);
-      }
-    }
-  }
-
-  return res;
-}
-
-vtkNew<vtkIdList> Refiner::FindPointsToRefine(vtkPolyData* mesh) const {
-  vtkNew<vtkIdList> res;
-
-  auto points = mesh->GetPoints();
-
-  for (vtkIdType i = 0; i < points->GetNumberOfPoints(); ++i) {
-    double p[3];
-    points->GetPoint(i, p);
-
-    vtkNew<vtkIdList> point_ids_in_radius;
-    locator_->FindPointsWithinRadius(config_.judge_radius, p,
-                                     point_ids_in_radius);
-
-    for (vtkIdType j = 0; j < point_ids_in_radius->GetNumberOfIds(); ++j) {
-      double p_in_radius[3];
-      vtkIdType point_in_radius = point_ids_in_radius->GetId(j);
-      high_res_points_->GetPoint(point_in_radius, p_in_radius);
-
-      if (abs(p[2] - p_in_radius[2]) >= config_.delta_z_threshold) {
-        res->InsertNextId(i);
-        break;
-      }
-    }
-  }
-
-  return res;
-}
-
 }  // namespace mr

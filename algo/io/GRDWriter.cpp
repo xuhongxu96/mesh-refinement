@@ -39,6 +39,7 @@ void GRDWriter::Write(std::ostream& os, vtkPolyData* mesh) const {
   os.precision(8);
   os.setf(std::ios::fixed);
 
+  os << "GRD" << std::endl;
   os << n_cells << "  " << n_points << std::endl;
 
   for (vtkIdType i = 0; i < n_points; ++i) {

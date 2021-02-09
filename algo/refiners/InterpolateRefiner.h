@@ -1,38 +1,20 @@
 #pragma once
 
+#include <interpolaters/IInterpolater.h>
 #include <vtkEdgeTable.h>
 #include <vtkIntArray.h>
 #include <vtkPointData.h>
 #include <vtkPoints.h>
-#include <vtkPolyData.h>
-#include <vtkStaticPointLocator2D.h>
+
+#include <memory>
+
+#include "IRefiner.h"
 
 namespace mr {
 
-struct RefinerConfig {
+struct InterpolateRefinerConfig {
   //! @brief 细分次数（每次都会将需要细分的三角形在各边中点处细分）
   int refine_times = 2;
-
-  //! @brief 判断是否需要细分的半径（以当前判断的点为中心）
-  double judge_radius = 20.0;
-
-  //! @brief 细分后的三角形最小面积
-  //!
-  //! 面积小于该面积的三角形将不再细分
-  double min_triangle_area = 50.0;
-
-  //! @brief z值差阈值
-  //!
-  //! 如果存在一个judge_radius半径内的点，
-  //! 其z值与判断中心点的差值超过该阈值，
-  //! 则需要细分与该判断中心点相关联的三角形
-  double delta_z_threshold = 2;
-
-  //! @brief 为插值点计算z值时，从点数据集中采样的半径（以插值点为中心）
-  double sample_radius = 20.0;
-
-  //! @brief IDW算法的p指数参数（通过点数据集为插值点计算z值时，采用IDW算法）
-  int idw_p = 2;
 
   //! @brief 网格线性插值计算z值的比重
   //!
@@ -41,16 +23,17 @@ struct RefinerConfig {
   double original_z_weight = 0.;
 };
 
-class Refiner {
+class InterpolateRefiner : public IRefiner {
  public:
-  Refiner(vtkPolyData* high_res_points, RefinerConfig config = {});
+  InterpolateRefiner(std::shared_ptr<IInterpolater> interpolater,
+                     InterpolateRefinerConfig config = {});
 
-  vtkNew<vtkPolyData> Refine(vtkPolyData* mesh) const;
+  vtkNew<vtkPolyData> Refine(vtkPolyData* mesh,
+                             vtkIdList* cell_ids_to_refine) const override;
 
  private:
-  RefinerConfig config_;
-  vtkPolyData* high_res_points_;
-  vtkNew<vtkStaticPointLocator2D> locator_;
+  std::shared_ptr<IInterpolater> interpolater_;
+  InterpolateRefinerConfig config_;
 
   //! @brief
   //! @param mesh
@@ -68,8 +51,6 @@ class Refiner {
                                 vtkPoints* output_points, vtkIdList* stencil,
                                 double* weights) const;
 
-  double GetInterpolatedZFromHighResData(double* x) const;
-
   void GenerateSubdivisionPoints(vtkPolyData* input_ds,
                                  vtkEdgeTable* edge_table,
                                  vtkIntArray* edge_data,
@@ -81,11 +62,6 @@ class Refiner {
                                 vtkIntArray* edge_data,
                                 vtkCellArray* output_cells,
                                 vtkCellData* output_cd) const;
-
-  vtkNew<vtkIdList> FindUniqueCellsByPoints(vtkPolyData* mesh,
-                                            vtkIdList* point_ids) const;
-
-  vtkNew<vtkIdList> FindPointsToRefine(vtkPolyData* mesh) const;
 };
 
 }  // namespace mr

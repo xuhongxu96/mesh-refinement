@@ -1,97 +1,87 @@
-#include <GRDWriter.h>
-#include <MeshReader.h>
-#include <MeshWriter.h>
-#include <Refiner.h>
+#include <RefineJudger.h>
+#include <interpolaters/IDW.h>
+#include <io/GRDWriter.h>
+#include <io/MeshReader.h>
+#include <io/MeshWriter.h>
+#include <refiners/DelaunayRefiner.h>
+#include <refiners/InterpolateRefiner.h>
 #include <vtkActor.h>
-#include <vtkCellPicker.h>
-#include <vtkDataSetMapper.h>
-#include <vtkExtractSelection.h>
+#include <vtkCellData.h>
 #include <vtkIdTypeArray.h>
-#include <vtkInteractorStyleTerrain.h>
-#include <vtkInteractorStyleTrackballCamera.h>
-#include <vtkOBJWriter.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkProperty.h>
 #include <vtkRenderWindow.h>
 #include <vtkRenderWindowInteractor.h>
 #include <vtkRenderer.h>
-#include <vtkRendererCollection.h>
-#include <vtkSelection.h>
-#include <vtkSelectionNode.h>
 #include <vtkSimplePointsReader.h>
-#include <vtkUnstructuredGrid.h>
+#include <vtkUnsignedCharArray.h>
 
-class MouseInteractorStyle : public vtkInteractorStyleTerrain {
- public:
-  static MouseInteractorStyle* New();
+#include "MouseInteractorStyle.h"
 
-  virtual void OnLeftButtonDown() override {
-    // Get the location of the click (in window coordinates)
-    int* pos = this->GetInteractor()->GetEventPosition();
+void AddColor(vtkPolyData* res) {
+  vtkNew<vtkUnsignedCharArray> colors;
+  colors->SetNumberOfComponents(3);
+  colors->SetNumberOfTuples(res->GetNumberOfCells());
 
-    vtkNew<vtkCellPicker> picker;
-    picker->SetTolerance(0.0005);
-
-    // Pick from this location.
-    picker->Pick(pos[0], pos[1], 0, this->GetDefaultRenderer());
-
-    double* worldPosition = picker->GetPickPosition();
-    std::cout << "Cell id is: " << picker->GetCellId() << std::endl;
-
-    if (picker->GetCellId() != -1) {
-      vtkNew<vtkIdTypeArray> ids;
-
-      ids->SetNumberOfComponents(1);
-      ids->InsertNextValue(picker->GetCellId());
-
-      vtkSmartPointer<vtkSelectionNode> selectionNode =
-          vtkSmartPointer<vtkSelectionNode>::New();
-      selectionNode->SetFieldType(vtkSelectionNode::CELL);
-      selectionNode->SetContentType(vtkSelectionNode::INDICES);
-      selectionNode->SetSelectionList(ids);
-
-      vtkSmartPointer<vtkSelection> selection =
-          vtkSmartPointer<vtkSelection>::New();
-      selection->AddNode(selectionNode);
-
-      vtkSmartPointer<vtkExtractSelection> extractSelection =
-          vtkSmartPointer<vtkExtractSelection>::New();
-      extractSelection->SetInputData(0, this->Data);
-      extractSelection->SetInputData(1, selection);
-      extractSelection->Update();
-
-      // In selection
-      vtkSmartPointer<vtkUnstructuredGrid> selected =
-          vtkSmartPointer<vtkUnstructuredGrid>::New();
-      selected->ShallowCopy(extractSelection->GetOutput());
-
-      std::cout << "There are " << selected->GetNumberOfPoints()
-                << " points in the selection." << std::endl;
-      std::cout << "There are " << selected->GetNumberOfCells()
-                << " cells in the selection." << std::endl;
-      selectedMapper->SetInputData(selected);
-      selectedActor->SetMapper(selectedMapper);
-      selectedActor->GetProperty()->EdgeVisibilityOn();
-      selectedActor->GetProperty()->SetColor(0, 200, 0);
-
-      selectedActor->GetProperty()->SetLineWidth(3);
-
-      this->Interactor->GetRenderWindow()
-          ->GetRenderers()
-          ->GetFirstRenderer()
-          ->AddActor(selectedActor);
-    }
-
-    // Forward events
-    vtkInteractorStyleTerrain::OnLeftButtonDown();
+  for (size_t i = 0; i < res->GetNumberOfCells(); ++i) {
+    float rgb[3] = {100, 0, 0};
+    colors->InsertTuple(i, rgb);
   }
 
-  vtkPolyData* Data;
-  vtkNew<vtkDataSetMapper> selectedMapper;
-  vtkNew<vtkActor> selectedActor;
-};
+  res->GetCellData()->SetScalars(colors);
+}
 
-vtkStandardNewMacro(MouseInteractorStyle);
+void Render(vtkPolyData* left_mesh, vtkPolyData* right_mesh) {
+  double left_viewport[4] = {0.0, 0.0, 0.5, 1.0};
+  double right_viewport[4] = {0.5, 0.0, 1.0, 1.0};
+
+  vtkNew<vtkPolyDataMapper> left_mapper;
+  left_mapper->SetInputData(left_mesh);
+
+  vtkNew<vtkPolyDataMapper> right_mapper;
+  right_mapper->SetInputData(right_mesh);
+
+  vtkNew<vtkActor> left_actor;
+  left_actor->SetMapper(left_mapper);
+  left_actor->GetProperty()->SetSpecular(.4);
+  left_actor->GetProperty()->SetSpecularPower(30.0);
+
+  vtkNew<vtkActor> right_actor;
+  right_actor->SetMapper(right_mapper);
+  right_actor->GetProperty()->SetSpecular(.4);
+  right_actor->GetProperty()->SetSpecularPower(30.0);
+
+  vtkNew<vtkRenderer> left_renderer;
+  left_renderer->SetViewport(left_viewport);
+
+  vtkNew<vtkRenderer> right_renderer;
+  right_renderer->SetViewport(right_viewport);
+
+  vtkNew<vtkRenderWindow> renderWindow;
+  renderWindow->AddRenderer(left_renderer);
+  renderWindow->AddRenderer(right_renderer);
+  renderWindow->SetWindowName("Mesh Refinement");
+
+  vtkNew<MouseInteractorStyle> style;
+  style->SetCurrentRenderer(right_renderer);
+  style->DataMap = {
+      {left_renderer, left_mesh},
+      {right_renderer, right_mesh},
+  };
+
+  vtkNew<vtkRenderWindowInteractor> renderWindowInteractor;
+  renderWindowInteractor->SetRenderWindow(renderWindow);
+  renderWindowInteractor->SetInteractorStyle(style);
+
+  left_renderer->AddActor(left_actor);
+  left_renderer->SetBackground(255, 255, 255);
+
+  right_renderer->AddActor(right_actor);
+  right_renderer->SetBackground(255, 255, 255);
+
+  renderWindow->Render();
+  renderWindowInteractor->Start();
+}
 
 int main() {
   vtkNew<vtkSimplePointsReader> point_reader;
@@ -100,13 +90,16 @@ int main() {
 
   mr::MeshReader mesh_reader;
   auto mesh = mesh_reader.Read(DATA_PATH "original.mesh");
+  AddColor(mesh);
 
-  mr::Refiner refiner(point_reader->GetOutput());
-  auto refined_mesh = refiner.Refine(mesh);
+  mr::RefineJudger judger(point_reader->GetOutput());
+  auto cell_ids_to_refine = judger.FindCellsToRefine(mesh);
 
-  vtkNew<vtkPolyDataMapper> mapper;
-  mapper->SetInputData(refined_mesh);
-
+  mr::InterpolateRefiner refiner(
+      std::make_shared<mr::IDW>(point_reader->GetOutput()));
+  auto refined_mesh = refiner.Refine(mesh, cell_ids_to_refine);
+  AddColor(refined_mesh);
+  /*
   {
     mr::MeshWriter writer;
     writer.Write("out.mesh", refined_mesh);
@@ -116,35 +109,8 @@ int main() {
     mr::GRDWriter writer;
     writer.Write("out.grd", refined_mesh);
   }
-
-  vtkNew<vtkOBJWriter> obj_writer;
-  obj_writer->SetFileName("out.obj");
-  obj_writer->SetInputData(refined_mesh);
-  obj_writer->Update();
-
-  vtkNew<vtkActor> actor;
-  actor->SetMapper(mapper);
-  actor->GetProperty()->SetSpecular(.4);
-  actor->GetProperty()->SetSpecularPower(30.0);
-
-  vtkNew<vtkRenderer> renderer;
-  vtkNew<vtkRenderWindow> renderWindow;
-  renderWindow->AddRenderer(renderer);
-  renderWindow->SetWindowName("Mesh Refinement");
-
-  vtkNew<MouseInteractorStyle> style;
-  style->SetDefaultRenderer(renderer);
-  style->Data = refined_mesh;
-
-  vtkNew<vtkRenderWindowInteractor> renderWindowInteractor;
-  renderWindowInteractor->SetRenderWindow(renderWindow);
-  renderWindowInteractor->SetInteractorStyle(style);
-
-  renderer->AddActor(actor);
-  renderer->SetBackground(255, 255, 255);
-
-  renderWindow->Render();
-  renderWindowInteractor->Start();
+*/
+  Render(mesh, refined_mesh);
 
   return EXIT_SUCCESS;
 }

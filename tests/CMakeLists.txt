@@ -4,7 +4,6 @@ find_package(GTest CONFIG REQUIRED)
 
 add_executable(mr_tests 
 	MeshReaderTests.cpp
-	RefinerTests.cpp
 )
 
 target_link_libraries(mr_tests PRIVATE algo GTest::gtest GTest::gtest_main)

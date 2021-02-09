@@ -19,6 +19,9 @@ find_package(VTK COMPONENTS
 
 add_executable(ui 
 	main.cpp
+    
+    MouseInteractorStyle.h
+    MouseInteractorStyle.cpp
 )
 
 target_link_libraries(ui PRIVATE algo ${VTK_LIBRARIES})
