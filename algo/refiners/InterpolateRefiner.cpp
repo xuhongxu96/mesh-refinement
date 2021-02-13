@@ -75,10 +75,16 @@ vtkNew<vtkPolyData> InterpolateRefiner::Refine(
   return res;
 }
 
-vtkIdType InterpolateRefiner::FindEdge(vtkPolyData* mesh, vtkIdType cell_id,
-                                       vtkIdType p1, vtkIdType p2,
-                                       vtkIntArray* edge_data,
-                                       vtkIdList* cell_ids) {
+//! @brief
+//! @param mesh
+//! @param cell_id
+//! @param p1
+//! @param p2
+//! @param edge_data
+//! @param cell_ids To avoid frequent memory allocation
+//! @return
+vtkIdType FindEdge(vtkPolyData* mesh, vtkIdType cell_id, vtkIdType p1,
+                   vtkIdType p2, vtkIntArray* edge_data, vtkIdList* cell_ids) {
   mesh->GetCellEdgeNeighbors(cell_id, p1, p2, cell_ids);
 
   for (vtkIdType i = 0; i < cell_ids->GetNumberOfIds(); ++i) {

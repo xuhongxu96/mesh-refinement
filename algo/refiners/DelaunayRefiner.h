@@ -7,17 +7,14 @@
 
 namespace mr {
 
-struct DelaunayRefinerConfig {
-  double resolution_x = 10.;
-  double resolution_y = 10.;
-};
+struct DelaunayRefinerConfig {};
 
 class DelaunayRefiner : public IRefiner {
  public:
   DelaunayRefiner(std::shared_ptr<IInterpolater> interpolater,
                   DelaunayRefinerConfig config = {});
 
-  vtkNew<vtkPolyData> Refine(vtkPolyData* mesh,
+  vtkNew<vtkPolyData> Refine(vtkPolyData* input,
                              vtkIdList* cell_ids_to_refine) const override;
 
  private:

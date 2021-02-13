@@ -35,18 +35,6 @@ class InterpolateRefiner : public IRefiner {
   std::shared_ptr<IInterpolater> interpolater_;
   InterpolateRefinerConfig config_;
 
-  //! @brief
-  //! @param mesh
-  //! @param cell_id
-  //! @param p1
-  //! @param p2
-  //! @param edge_data
-  //! @param cell_ids To avoid frequent memory allocation
-  //! @return
-  static vtkIdType FindEdge(vtkPolyData* mesh, vtkIdType cell_id, vtkIdType p1,
-                            vtkIdType p2, vtkIntArray* edge_data,
-                            vtkIdList* cell_ids);
-
   vtkIdType InterpolatePosition(vtkPoints* input_points,
                                 vtkPoints* output_points, vtkIdList* stencil,
                                 double* weights) const;

@@ -95,11 +95,10 @@ int main() {
   mr::RefineJudger judger(point_reader->GetOutput());
   auto cell_ids_to_refine = judger.FindCellsToRefine(mesh);
 
-  mr::InterpolateRefiner refiner(
+  mr::DelaunayRefiner refiner(
       std::make_shared<mr::IDW>(point_reader->GetOutput()));
   auto refined_mesh = refiner.Refine(mesh, cell_ids_to_refine);
   AddColor(refined_mesh);
-  /*
   {
     mr::MeshWriter writer;
     writer.Write("out.mesh", refined_mesh);
@@ -109,7 +108,6 @@ int main() {
     mr::GRDWriter writer;
     writer.Write("out.grd", refined_mesh);
   }
-*/
   Render(mesh, refined_mesh);
 
   return EXIT_SUCCESS;
