@@ -28,8 +28,8 @@ class InterpolateRefiner : public IRefiner {
   InterpolateRefiner(std::shared_ptr<IInterpolater> interpolater,
                      InterpolateRefinerConfig config = {});
 
-  vtkNew<vtkPolyData> Refine(vtkPolyData* mesh,
-                             vtkIdList* cell_ids_to_refine) const override;
+  vtkNew<vtkPolyData> Refine(vtkPolyData* mesh, vtkIdList* cell_ids_to_refine,
+                             vtkPoints* degen_points) const override;
 
  private:
   std::shared_ptr<IInterpolater> interpolater_;

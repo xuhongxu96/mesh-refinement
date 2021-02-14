@@ -16,8 +16,9 @@ InterpolateRefiner::InterpolateRefiner(
     InterpolateRefinerConfig config)
     : interpolater_{interpolater}, config_{std::move(config)} {}
 
-vtkNew<vtkPolyData> InterpolateRefiner::Refine(
-    vtkPolyData* mesh, vtkIdList* cell_ids_to_refine) const {
+vtkNew<vtkPolyData> InterpolateRefiner::Refine(vtkPolyData* mesh,
+                                               vtkIdList* cell_ids_to_refine,
+                                               vtkPoints* degen_points) const {
   vtkPolyData* input_ds = vtkPolyData::New();
 
   input_ds->CopyStructure(mesh);

@@ -8,7 +8,9 @@
 #include <vtkPointData.h>
 #include <vtkPolygon.h>
 #include <vtkTriangle.h>
+#include <vtkUnsignedCharArray.h>
 
+#include <array>
 #include <unordered_set>
 namespace mr {
 
@@ -78,14 +80,12 @@ static vtkIdType FindTriangle(vtkPolyData* mesh, double x[3],
       vx[j] = x[j] - p[i][j];
     }
 
-    /*
-    // check for duplicate point
     vtkMath::Normalize2D(vp);
-    if (vtkMath::Normalize2D(vx) <= tol) {
+    // check for duplicate point
+    if (vtkMath::Normalize2D(vx) <= tol * 0.00001) {
       ++n_duplicate_points;
       return -1;
     }
-*/
     // see if two points are in opposite half spaces
     dp = vtkMath::Dot2D(n, vx) * (vtkMath::Dot2D(n, vp) < 0 ? -1.0 : 1.0);
     if (dp < VTK_DEL2D_TOLERANCE) {
@@ -197,8 +197,9 @@ DelaunayRefiner::DelaunayRefiner(std::shared_ptr<IInterpolater> interpolater,
                                  DelaunayRefinerConfig config)
     : interpolater_{interpolater}, config_{std::move(config)} {}
 
-vtkNew<vtkPolyData> DelaunayRefiner::Refine(
-    vtkPolyData* input, vtkIdList* cell_ids_to_refine) const {
+vtkNew<vtkPolyData> DelaunayRefiner::Refine(vtkPolyData* input,
+                                            vtkIdList* cell_ids_to_refine,
+                                            vtkPoints* degen_points) const {
   vtkNew<vtkPolyData> mesh;
 
   /*
@@ -214,7 +215,8 @@ vtkNew<vtkPolyData> DelaunayRefiner::Refine(
 
   vtkIdType n_old_points = mesh->GetNumberOfPoints();
 
-  GeneratePoints(input, mesh, cell_ids_to_refine);
+  auto point_cell_map =
+      GeneratePoints(input, mesh->GetPoints(), cell_ids_to_refine);
   mesh->BuildLinks();
 
   vtkIdType n_points = mesh->GetNumberOfPoints();
@@ -228,6 +230,15 @@ vtkNew<vtkPolyData> DelaunayRefiner::Refine(
   vtkIdType tri[4];
   tri[0] = 0;
 
+  vtkNew<vtkPoints> new_points;
+  std::unordered_map<vtkIdType, vtkIdType> new_point_map;
+
+  for (vtkIdType point_id = 0; point_id < n_old_points; point_id++) {
+    double x[3];
+    mesh->GetPoint(point_id, x);
+    new_points->InsertNextPoint(x);
+  }
+
   for (vtkIdType point_id = n_old_points; point_id < n_points; point_id++) {
     double x[3];
     vtkIdType pts[3];
@@ -236,9 +247,12 @@ vtkNew<vtkPolyData> DelaunayRefiner::Refine(
     mesh->GetPoint(point_id, x);
 
     nei[0] = (-1);  // where we are coming from...nowhere initially
+    tri[0] = point_cell_map[point_id];
 
     if ((tri[0] = FindTriangle(mesh, x, pts, tri[0], tol, nei, neighbors,
                                n_duplicate, n_degeneracies)) >= 0) {
+      new_point_map[point_id] = new_points->InsertNextPoint(x);
+
       if (nei[0] < 0)  // in triangle
       {
         // delete this triangle; create three new triangles
@@ -327,14 +341,37 @@ vtkNew<vtkPolyData> DelaunayRefiner::Refine(
 
     else {
       tri[0] = 0;  // no triangle found
+      degen_points->InsertNextPoint(x);
     }
   }
 
-  return mesh;
+  vtkNew<vtkPolyData> res;
+  res->SetPoints(new_points);
+
+  vtkNew<vtkCellArray> cells;
+
+  for (vtkIdType cell_id = 0; cell_id < mesh->GetNumberOfCells(); ++cell_id) {
+    vtkNew<vtkIdList> ids;
+    mesh->GetCellPoints(cell_id, ids);
+    for (vtkIdType i = 0; i < ids->GetNumberOfIds(); i++) {
+      if (auto it = new_point_map.find(ids->GetId(i));
+          it != new_point_map.end()) {
+        ids->SetId(i, it->second);
+      }
+    }
+    cells->InsertNextCell(ids);
+  }
+
+  res->SetPolys(cells);
+  res->BuildLinks();
+
+  return res;
 }
 
-void DelaunayRefiner::GeneratePoints(vtkPolyData* input, vtkPolyData* output,
-                                     vtkIdList* cell_ids_to_refine) const {
+std::unordered_map<vtkIdType, vtkIdType> DelaunayRefiner::GeneratePoints(
+    vtkPolyData* input, vtkPoints* output,
+    vtkIdList* cell_ids_to_refine) const {
+  std::unordered_map<vtkIdType, vtkIdType> res;
   for (vtkIdType cell_id : *cell_ids_to_refine) {
     vtkIdType n_points;
     const vtkIdType* point_ids;
@@ -353,8 +390,10 @@ void DelaunayRefiner::GeneratePoints(vtkPolyData* input, vtkPolyData* output,
     double z = interpolater_->GetValue(p);
     if (z == 0) continue;
 
-    output->GetPoints()->InsertNextPoint(p[0], p[1], z);
+    res[output->InsertNextPoint(p[0], p[1], z)] = cell_id;
   }
+
+  return res;
 }
 
 }  // namespace mr

@@ -7,6 +7,7 @@
 #include <refiners/InterpolateRefiner.h>
 #include <vtkActor.h>
 #include <vtkCellData.h>
+#include <vtkDataSetMapper.h>
 #include <vtkIdTypeArray.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkProperty.h>
@@ -15,6 +16,7 @@
 #include <vtkRenderer.h>
 #include <vtkSimplePointsReader.h>
 #include <vtkUnsignedCharArray.h>
+#include <vtkVertexGlyphFilter.h>
 
 #include "MouseInteractorStyle.h"
 
@@ -31,53 +33,61 @@ void AddColor(vtkPolyData* res) {
   res->GetCellData()->SetScalars(colors);
 }
 
-void Render(vtkPolyData* left_mesh, vtkPolyData* right_mesh) {
-  double left_viewport[4] = {0.0, 0.0, 0.5, 1.0};
-  double right_viewport[4] = {0.5, 0.0, 1.0, 1.0};
-
-  vtkNew<vtkPolyDataMapper> left_mapper;
-  left_mapper->SetInputData(left_mesh);
-
-  vtkNew<vtkPolyDataMapper> right_mapper;
-  right_mapper->SetInputData(right_mesh);
-
-  vtkNew<vtkActor> left_actor;
-  left_actor->SetMapper(left_mapper);
-  left_actor->GetProperty()->SetSpecular(.4);
-  left_actor->GetProperty()->SetSpecularPower(30.0);
-
-  vtkNew<vtkActor> right_actor;
-  right_actor->SetMapper(right_mapper);
-  right_actor->GetProperty()->SetSpecular(.4);
-  right_actor->GetProperty()->SetSpecularPower(30.0);
-
-  vtkNew<vtkRenderer> left_renderer;
-  left_renderer->SetViewport(left_viewport);
-
-  vtkNew<vtkRenderer> right_renderer;
-  right_renderer->SetViewport(right_viewport);
+void Render(vtkPolyData* left_mesh, vtkPolyData* right_mesh,
+            vtkPoints* degen_points) {
+  vtkPolyData* meshes[2] = {left_mesh, right_mesh};
+  double viewports[2][4] = {{0.0, 0.0, 0.5, 1.0}, {0.5, 0.0, 1.0, 1.0}};
 
   vtkNew<vtkRenderWindow> renderWindow;
-  renderWindow->AddRenderer(left_renderer);
-  renderWindow->AddRenderer(right_renderer);
-  renderWindow->SetWindowName("Mesh Refinement");
-
   vtkNew<MouseInteractorStyle> style;
-  style->SetCurrentRenderer(right_renderer);
-  style->DataMap = {
-      {left_renderer, left_mesh},
-      {right_renderer, right_mesh},
-  };
+
+  for (int i = 0; i < 2; ++i) {
+    vtkNew<vtkPolyData> point_mesh;
+    point_mesh->SetPoints(degen_points);
+
+    vtkNew<vtkVertexGlyphFilter> vertex_filter;
+    vertex_filter->SetInputData(point_mesh);
+    vertex_filter->Update();
+
+    vtkNew<vtkPolyData> point_mesh2;
+    point_mesh2->ShallowCopy(vertex_filter->GetOutput());
+
+    vtkNew<vtkActor> point_actor;
+    {
+      vtkNew<vtkPolyDataMapper> mapper;
+      mapper->SetInputData(point_mesh2);
+      point_actor->SetMapper(mapper);
+      point_actor->GetProperty()->SetPointSize(3);
+      point_actor->GetProperty()->SetColor(0, 0, 0);
+    }
+
+    vtkNew<vtkActor> actor;
+    {
+      vtkNew<vtkPolyDataMapper> mapper;
+      mapper->SetInputData(meshes[i]);
+      actor->SetMapper(mapper);
+      actor->GetProperty()->SetSpecular(.4);
+      actor->GetProperty()->SetSpecularPower(30.0);
+    }
+
+    vtkNew<vtkRenderer> renderer;
+    renderer->SetViewport(viewports[i]);
+
+    renderWindow->AddRenderer(renderer);
+
+    style->SetCurrentRenderer(renderer);
+    style->DataMap.insert({renderer, meshes[i]});
+
+    renderer->AddActor(actor);
+    renderer->AddActor(point_actor);
+    renderer->SetBackground(255, 255, 255);
+  }
+
+  renderWindow->SetWindowName("Mesh Refinement");
 
   vtkNew<vtkRenderWindowInteractor> renderWindowInteractor;
   renderWindowInteractor->SetRenderWindow(renderWindow);
   renderWindowInteractor->SetInteractorStyle(style);
-
-  left_renderer->AddActor(left_actor);
-  left_renderer->SetBackground(255, 255, 255);
-
-  right_renderer->AddActor(right_actor);
-  right_renderer->SetBackground(255, 255, 255);
 
   renderWindow->Render();
   renderWindowInteractor->Start();
@@ -97,7 +107,10 @@ int main() {
 
   mr::DelaunayRefiner refiner(
       std::make_shared<mr::IDW>(point_reader->GetOutput()));
-  auto refined_mesh = refiner.Refine(mesh, cell_ids_to_refine);
+
+  vtkNew<vtkPoints> degen_points;
+  auto refined_mesh = refiner.Refine(mesh, cell_ids_to_refine, degen_points);
+
   AddColor(refined_mesh);
   {
     mr::MeshWriter writer;
@@ -108,7 +121,7 @@ int main() {
     mr::GRDWriter writer;
     writer.Write("out.grd", refined_mesh);
   }
-  Render(mesh, refined_mesh);
+  Render(mesh, refined_mesh, degen_points);
 
   return EXIT_SUCCESS;
 }
