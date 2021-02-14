@@ -1,6 +1,5 @@
 #include "DelaunayRefiner.h"
 
-#include <custom_ops/xDelaunay2D.h>
 #include <vtkCellArray.h>
 #include <vtkFeatureEdges.h>
 #include <vtkIdFilter.h>
