@@ -2,6 +2,7 @@
 
 #include <vtkMath.h>
 
+#include <optional>
 #include <unordered_set>
 
 namespace mr {
@@ -46,49 +47,101 @@ struct CellEdge {
   int max_radian_index;
 };
 
-static std::unordered_map<vtkIdType, CellEdge> FindCellEdgeWithBigAngle(
-    vtkPolyData* mesh, double radian) {
-  std::unordered_map<vtkIdType, CellEdge> res;
-  for (vtkIdType cell_id = 0; cell_id < mesh->GetNumberOfCells(); ++cell_id) {
-    vtkIdType n_points;
-    const vtkIdType* point_ids;
-    mesh->GetCellPoints(cell_id, n_points, point_ids);
-    assert(n_points == 3);
-
-    double p[3][3];
-    for (int i = 0; i < 3; ++i) mesh->GetPoint(point_ids[i], p[i]);
-
-    double vec[3][3];
-    for (int i = 0; i < 3; ++i) {
-      for (int j = 0; j < 3; ++j) {
-        vec[i][j] = p[i][j] - p[(i + 1) % 3][j];
-      }
-    }
-
-    double radians[3];
-    int max_radian_index = -1;
-    for (int i = 0; i < 3; ++i) {
-      radians[i] = vtkMath::Pi() -
-                   vtkMath::AngleBetweenVectors(vec[i], vec[(i + 1) % 3]);
-      if (radians[i] >= radian) max_radian_index = i;
-    }
-
-    if (max_radian_index == -1) continue;
-
-    res[cell_id].max_radian_index = max_radian_index;
-
-    res[cell_id].max_p_id = point_ids[(max_radian_index + 1) % 3];
-    res[cell_id].p1_id = point_ids[max_radian_index];
-    res[cell_id].p2_id = point_ids[(max_radian_index + 2) % 3];
-
-    for (int i = 0; i < 3; ++i) {
-      res[cell_id].max_p[i] = p[(max_radian_index + 1) % 3][i];
-      res[cell_id].p1[i] = p[max_radian_index][i];
-      res[cell_id].p2[i] = p[(max_radian_index + 2) % 3][i];
+static int GetMaxRadianIndex(double p[3][3], double radian) {
+  double vec[3][3];
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      vec[i][j] = p[i][j] - p[(i + 1) % 3][j];
     }
   }
 
+  int max_radian_index = -1;
+  for (int i = 0; i < 3; ++i) {
+    double current_radian =
+        vtkMath::Pi() - vtkMath::AngleBetweenVectors(vec[i], vec[(i + 1) % 3]);
+    if (current_radian >= radian) max_radian_index = i;
+  }
+
+  return max_radian_index;
+}
+
+static std::optional<CellEdge> DoesCellNeedOptimization(vtkPolyData* mesh,
+                                                        vtkIdType cell_id,
+                                                        double radian) {
+  vtkIdType n_points;
+  const vtkIdType* point_ids;
+  mesh->GetCellPoints(cell_id, n_points, point_ids);
+  assert(n_points == 3);
+
+  double p[3][3];
+  for (int i = 0; i < 3; ++i) mesh->GetPoint(point_ids[i], p[i]);
+
+  int max_radian_index = GetMaxRadianIndex(p, radian);
+  if (max_radian_index == -1) return {};
+
+  CellEdge res;
+  res.max_radian_index = max_radian_index;
+
+  res.max_p_id = point_ids[(max_radian_index + 1) % 3];
+  res.p1_id = point_ids[max_radian_index];
+  res.p2_id = point_ids[(max_radian_index + 2) % 3];
+
+  for (int i = 0; i < 3; ++i) {
+    res.max_p[i] = p[(max_radian_index + 1) % 3][i];
+    res.p1[i] = p[max_radian_index][i];
+    res.p2[i] = p[(max_radian_index + 2) % 3][i];
+  }
+
   return res;
+}
+
+static std::unordered_map<vtkIdType, CellEdge> FindCellEdgeWithBigAngle(
+    vtkPolyData* mesh, double radian) {
+  std::unordered_map<vtkIdType, CellEdge> res;
+
+  for (vtkIdType cell_id = 0; cell_id < mesh->GetNumberOfCells(); ++cell_id) {
+    auto info = DoesCellNeedOptimization(mesh, cell_id, radian);
+    if (info) res[cell_id] = *info;
+  }
+
+  return res;
+}
+
+static vtkIdType GetOppositePointId(vtkPolyData* mesh, vtkIdType cell_id,
+                                    vtkIdType p1, vtkIdType p2) {
+  vtkIdType n_points;
+  const vtkIdType* point_ids;
+  mesh->GetCellPoints(cell_id, n_points, point_ids);
+  assert(n_points == 3);
+  for (int i = 0; i < 3; ++i) {
+    if (point_ids[i] != p1 && point_ids[i] != p2) {
+      return point_ids[i];
+    }
+  }
+
+  throw std::runtime_error(
+      "cannot get opposite point id, which shouldn't happen");
+}
+
+static void SwapDiagonal(vtkPolyData* mesh, vtkIdType cell_id,
+                         vtkIdType nei_cell_id, vtkIdType nei_point_id,
+                         const CellEdge& info) {
+  mesh->RemoveReferenceToCell(info.p1_id, cell_id);
+  mesh->RemoveReferenceToCell(info.p2_id, nei_cell_id);
+  mesh->ResizeCellList(nei_point_id, 1);
+  mesh->AddReferenceToCell(nei_point_id, cell_id);
+  mesh->ResizeCellList(info.max_p_id, 1);
+  mesh->AddReferenceToCell(info.max_p_id, nei_cell_id);
+
+  {
+    vtkIdType new_point_ids[3] = {info.p1_id, info.max_p_id, nei_point_id};
+    mesh->ReplaceCell(cell_id, 3, new_point_ids);
+  }
+
+  {
+    vtkIdType new_point_ids[3] = {info.max_p_id, info.p2_id, nei_point_id};
+    mesh->ReplaceCell(nei_cell_id, 3, new_point_ids);
+  }
 }
 
 vtkNew<vtkPolyData> AngleOptimizer::Optimize(
@@ -113,7 +166,7 @@ vtkNew<vtkPolyData> AngleOptimizer::Optimize(
     res->GetCellEdgeNeighbors(cell_id, info.p1_id, info.p2_id, nei_cell_ids);
     switch (nei_cell_ids->GetNumberOfIds()) {
       case 0:
-        // directly split the edge
+        // edge cell, directly split the edge
         {
           double mid_p[3];
           for (int i = 0; i < 3; ++i) {
@@ -141,10 +194,45 @@ vtkNew<vtkPolyData> AngleOptimizer::Optimize(
         break;
       case 1:
         // two ways:
-        // 1. swap diagonal, 
-        // 2. split the edge and the neighbor, need to check if neighbor is really
-        // optmized
-        failed_cell_ids.insert(cell_id);
+        // 1. swap diagonal,
+        // 2. split the edge and the neighbor, need to check if neighbor is
+        // really optmized
+        {
+          vtkIdType nei_cell_id = nei_cell_ids->GetId(0);
+          vtkIdType nei_point_id =
+              GetOppositePointId(res, nei_cell_id, info.p1_id, info.p2_id);
+
+          bool succ = true;
+
+          {
+            double p[3][3];
+            for (int i = 0; i < 3; ++i) {
+              p[0][i] = info.p1[i];
+              p[1][i] = info.max_p[i];
+              p[2][i] = res->GetPoint(nei_point_id)[i];
+            }
+            if (GetMaxRadianIndex(p, max_radian) != -1) succ = false;
+          }
+
+          {
+            double p[3][3];
+            for (int i = 0; i < 3; ++i) {
+              p[0][i] = info.max_p[i];
+              p[1][i] = info.p2[i];
+              p[2][i] = res->GetPoint(nei_point_id)[i];
+            }
+            if (GetMaxRadianIndex(p, max_radian) != -1) succ = false;
+          }
+
+          if (succ) {
+            SwapDiagonal(res, cell_id, nei_cell_id, nei_point_id, info);
+            optimized_cell_ids.insert(cell_id);
+            optimized_cell_ids.insert(nei_cell_id);
+          } else {
+            failed_cell_ids.insert(cell_id);
+          }
+        }
+        // failed_cell_ids.insert(cell_id);
         break;
       default:
         throw std::runtime_error("neighbor cannot be greater than 1");
