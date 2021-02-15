@@ -1,8 +1,9 @@
-#include <RefineJudger.h>
 #include <interpolaters/IDW.h>
 #include <io/GRDWriter.h>
 #include <io/MeshReader.h>
 #include <io/MeshWriter.h>
+#include <judgers/RefineJudger.h>
+#include <optimizers/AngleOptimizer.h>
 #include <refiners/DelaunayRefiner.h>
 #include <refiners/InterpolateRefiner.h>
 #include <vtkActor.h>
@@ -20,14 +21,33 @@
 
 #include "MouseInteractorStyle.h"
 
-void AddColor(vtkPolyData* res) {
+vtkNew<vtkPoints> degen_points;
+std::unordered_set<vtkIdType> optimized_cell_ids;
+std::unordered_set<vtkIdType> failed_to_optimize_cell_ids;
+
+void AddColor(bool for_refined, vtkPolyData* res) {
   vtkNew<vtkUnsignedCharArray> colors;
   colors->SetNumberOfComponents(3);
   colors->SetNumberOfTuples(res->GetNumberOfCells());
 
   for (size_t i = 0; i < res->GetNumberOfCells(); ++i) {
-    float rgb[3] = {100, 0, 0};
-    colors->InsertTuple(i, rgb);
+    if (!for_refined) {
+      float rgb[3] = {100, 0, 0};
+      colors->InsertTuple(i, rgb);
+      continue;
+    }
+
+    if (optimized_cell_ids.find(i) != optimized_cell_ids.end()) {
+      float rgb[3] = {0, 100, 0};
+      colors->InsertTuple(i, rgb);
+    } else if (failed_to_optimize_cell_ids.find(i) !=
+               failed_to_optimize_cell_ids.end()) {
+      float rgb[3] = {0, 0, 100};
+      colors->InsertTuple(i, rgb);
+    } else {
+      float rgb[3] = {100, 0, 0};
+      colors->InsertTuple(i, rgb);
+    }
   }
 
   res->GetCellData()->SetScalars(colors);
@@ -100,7 +120,7 @@ int main() {
 
   mr::MeshReader mesh_reader;
   auto mesh = mesh_reader.Read(DATA_PATH "original.mesh");
-  AddColor(mesh);
+  AddColor(false, mesh);
 
   mr::RefineJudger judger(point_reader->GetOutput());
   auto cell_ids_to_refine = judger.FindCellsToRefine(mesh);
@@ -108,10 +128,13 @@ int main() {
   mr::DelaunayRefiner refiner(
       std::make_shared<mr::IDW>(point_reader->GetOutput()));
 
-  vtkNew<vtkPoints> degen_points;
-  auto refined_mesh = refiner.Refine(mesh, cell_ids_to_refine, degen_points);
+  mr::AngleOptimizer optimizer;
 
-  AddColor(refined_mesh);
+  auto refined_mesh =
+      optimizer.Optimize(refiner.Refine(mesh, cell_ids_to_refine, degen_points),
+                         optimized_cell_ids, failed_to_optimize_cell_ids);
+
+  AddColor(true, refined_mesh);
   {
     mr::MeshWriter writer;
     writer.Write("out.mesh", refined_mesh);

@@ -7,8 +7,8 @@ find_package(VTK COMPONENTS
 )
 
 add_library(algo STATIC
-    RefineJudger.h
-    RefineJudger.cpp
+    judgers/RefineJudger.h
+    judgers/RefineJudger.cpp
 
     interpolaters/IDW.h
     interpolaters/IDW.cpp
@@ -18,6 +18,9 @@ add_library(algo STATIC
     refiners/InterpolateRefiner.cpp
     refiners/DelaunayRefiner.h
     refiners/DelaunayRefiner.cpp
+
+    optimizers/AngleOptimizer.h
+    optimizers/AngleOptimizer.cpp
 
     io/MeshReader.h
     io/MeshReader.cpp

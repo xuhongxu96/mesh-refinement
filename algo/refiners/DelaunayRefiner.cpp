@@ -210,6 +210,7 @@ vtkNew<vtkPolyData> DelaunayRefiner::Refine(vtkPolyData* input,
   feature_edges->NonManifoldEdgesOff();
   feature_edges->Update();
 */
+  mesh->EditableOn();
   mesh->DeepCopy(input);
 
   vtkIdType n_old_points = mesh->GetNumberOfPoints();
@@ -363,6 +364,7 @@ vtkNew<vtkPolyData> DelaunayRefiner::Refine(vtkPolyData* input,
 
   res->SetPolys(cells);
   res->BuildLinks();
+  res->Squeeze();
 
   return res;
 }
