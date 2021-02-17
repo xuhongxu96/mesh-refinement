@@ -25,6 +25,8 @@ void MouseInteractorStyle::OnLeftButtonDown() {
   double* worldPosition = picker->GetPickPosition();
   std::cout << "Cell id is: " << picker->GetCellId() << std::endl;
 
+  auto mesh = this->DataMap[this->GetCurrentRenderer()];
+
   if (picker->GetCellId() != -1) {
     vtkNew<vtkIdTypeArray> ids;
 
@@ -43,8 +45,7 @@ void MouseInteractorStyle::OnLeftButtonDown() {
 
     vtkSmartPointer<vtkExtractSelection> extractSelection =
         vtkSmartPointer<vtkExtractSelection>::New();
-    extractSelection->SetInputData(0,
-                                   this->DataMap[this->GetCurrentRenderer()]);
+    extractSelection->SetInputData(0, mesh);
     extractSelection->SetInputData(1, selection);
     extractSelection->Update();
 
@@ -55,8 +56,31 @@ void MouseInteractorStyle::OnLeftButtonDown() {
 
     std::cout << "There are " << selected->GetNumberOfPoints()
               << " points in the selection." << std::endl;
-    std::cout << "There are " << selected->GetNumberOfCells()
-              << " cells in the selection." << std::endl;
+
+    std::cout.precision(8);
+    std::cout.setf(std::ios::fixed);
+
+    // Output angles
+    double p[3][3];
+    for (int i = 0; i < 3; ++i)
+      for (int j = 0; j < 3; ++j)
+        std::cout << (p[i][j] = selected->GetPoint(i)[j]) << " ";
+    std::cout << std::endl;
+
+    double vec[3][3];
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 2; ++j) {
+        vec[i][j] = p[i][j] - p[(i + 1) % 3][j];
+      }
+      vec[i][2] = 0;  // calculate angle in 2d only
+    }
+
+    for (int i = 0; i < 3; ++i) {
+      double current_radian = vtkMath::Pi() - vtkMath::AngleBetweenVectors(
+                                                  vec[i], vec[(i + 1) % 3]);
+      std::cout << vtkMath::DegreesFromRadians(current_radian) << std::endl;
+    }
+
     selectedMapper->SetInputData(selected);
     selectedActor->SetMapper(selectedMapper);
     selectedActor->GetProperty()->EdgeVisibilityOn();

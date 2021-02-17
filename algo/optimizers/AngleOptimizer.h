@@ -8,8 +8,7 @@
 namespace mr {
 
 struct AngleOptimizerConfig {
-  double max_angle = 130.;
-  vtkIdType max_connection = 8;
+  double max_angle = 128.;
 };
 
 class AngleOptimizer {

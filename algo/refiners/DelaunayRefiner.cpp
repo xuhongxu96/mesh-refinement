@@ -201,15 +201,6 @@ vtkNew<vtkPolyData> DelaunayRefiner::Refine(vtkPolyData* input,
                                             vtkPoints* degen_points) const {
   vtkNew<vtkPolyData> mesh;
 
-  /*
-  vtkNew<vtkFeatureEdges> feature_edges;
-  feature_edges->SetInputData(input);
-  feature_edges->BoundaryEdgesOn();
-  feature_edges->FeatureEdgesOff();
-  feature_edges->ManifoldEdgesOff();
-  feature_edges->NonManifoldEdgesOff();
-  feature_edges->Update();
-*/
   mesh->EditableOn();
   mesh->DeepCopy(input);
 
@@ -231,6 +222,7 @@ vtkNew<vtkPolyData> DelaunayRefiner::Refine(vtkPolyData* input,
   tri[0] = 0;
 
   vtkNew<vtkPoints> new_points;
+  new_points->SetDataTypeToDouble();
   std::unordered_map<vtkIdType, vtkIdType> new_point_map;
 
   for (vtkIdType point_id = 0; point_id < n_old_points; point_id++) {

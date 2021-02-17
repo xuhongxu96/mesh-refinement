@@ -130,21 +130,26 @@ int main() {
 
   mr::AngleOptimizer optimizer;
 
-  auto refined_mesh =
-      optimizer.Optimize(refiner.Refine(mesh, cell_ids_to_refine, degen_points),
-                         optimized_cell_ids, failed_to_optimize_cell_ids);
+  auto refined_mesh = refiner.Refine(mesh, cell_ids_to_refine, degen_points);
+  auto optimized_mesh = optimizer.Optimize(refined_mesh, optimized_cell_ids,
+                                           failed_to_optimize_cell_ids);
+  optimized_cell_ids.clear();
+  failed_to_optimize_cell_ids.clear();
+  auto optimized_mesh2 = optimizer.Optimize(optimized_mesh, optimized_cell_ids,
+                                            failed_to_optimize_cell_ids);
 
   AddColor(true, refined_mesh);
+  AddColor(true, optimized_mesh2);
   {
     mr::MeshWriter writer;
-    writer.Write("out.mesh", refined_mesh);
+    writer.Write("out.mesh", optimized_mesh2);
   }
 
   {
     mr::GRDWriter writer;
-    writer.Write("out.grd", refined_mesh);
+    writer.Write("out.grd", optimized_mesh2);
   }
-  Render(mesh, refined_mesh, degen_points);
+  Render(refined_mesh, optimized_mesh2, degen_points);
 
   return EXIT_SUCCESS;
 }
