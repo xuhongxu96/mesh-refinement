@@ -21,6 +21,8 @@ add_library(algo STATIC
 
     optimizers/AngleOptimizer.h
     optimizers/AngleOptimizer.cpp
+    optimizers/ConnectionOptimizer.h
+    optimizers/ConnectionOptimizer.cpp
 
     io/MeshReader.h
     io/MeshReader.cpp

@@ -4,6 +4,7 @@
 #include <io/MeshWriter.h>
 #include <judgers/RefineJudger.h>
 #include <optimizers/AngleOptimizer.h>
+#include <optimizers/ConnectionOptimizer.h>
 #include <refiners/DelaunayRefiner.h>
 #include <refiners/InterpolateRefiner.h>
 #include <vtkActor.h>
@@ -19,34 +20,42 @@
 #include <vtkUnsignedCharArray.h>
 #include <vtkVertexGlyphFilter.h>
 
+#include <array>
+#include <vector>
+
 #include "MouseInteractorStyle.h"
 
-vtkNew<vtkPoints> degen_points;
-std::unordered_set<vtkIdType> optimized_cell_ids;
-std::unordered_set<vtkIdType> failed_to_optimize_cell_ids;
-
-void AddColor(bool for_refined, vtkPolyData* res) {
+void AddColor(vtkPolyData* res,
+              const std::unordered_map<vtkIdType, std::array<float, 3>>&
+                  cell_color_map = {},
+              const std::unordered_map<vtkIdType, std::array<float, 3>>&
+                  point_color_map = {}) {
   vtkNew<vtkUnsignedCharArray> colors;
   colors->SetNumberOfComponents(3);
   colors->SetNumberOfTuples(res->GetNumberOfCells());
 
   for (size_t i = 0; i < res->GetNumberOfCells(); ++i) {
-    if (!for_refined) {
-      float rgb[3] = {100, 0, 0};
-      colors->InsertTuple(i, rgb);
-      continue;
-    }
-
-    if (optimized_cell_ids.find(i) != optimized_cell_ids.end()) {
-      float rgb[3] = {0, 100, 0};
-      colors->InsertTuple(i, rgb);
-    } else if (failed_to_optimize_cell_ids.find(i) !=
-               failed_to_optimize_cell_ids.end()) {
-      float rgb[3] = {0, 0, 100};
-      colors->InsertTuple(i, rgb);
+    if (auto it = cell_color_map.find(i); it != cell_color_map.end()) {
+      colors->InsertTuple(i, it->second.data());
     } else {
-      float rgb[3] = {100, 0, 0};
-      colors->InsertTuple(i, rgb);
+      bool is_point_color_mapped = false;
+
+      vtkIdType n_pts;
+      const vtkIdType* pts;
+      res->GetCellPoints(i, n_pts, pts);
+      for (vtkIdType j = 0; j < n_pts; ++j) {
+        if (auto it = point_color_map.find(pts[j]);
+            it != point_color_map.end()) {
+          is_point_color_mapped = true;
+          colors->InsertTuple(i, it->second.data());
+          break;
+        }
+      }
+
+      if (!is_point_color_mapped) {
+        float rgb[3] = {0, 0, 100};
+        colors->InsertTuple(i, rgb);
+      }
     }
   }
 
@@ -120,7 +129,7 @@ int main() {
 
   mr::MeshReader mesh_reader;
   auto mesh = mesh_reader.Read(DATA_PATH "original.mesh");
-  AddColor(false, mesh);
+  AddColor(mesh);
 
   mr::RefineJudger judger(point_reader->GetOutput());
   auto cell_ids_to_refine = judger.FindCellsToRefine(mesh);
@@ -128,18 +137,56 @@ int main() {
   mr::DelaunayRefiner refiner(
       std::make_shared<mr::IDW>(point_reader->GetOutput()));
 
-  mr::AngleOptimizer optimizer;
+  mr::AngleOptimizer angle_optimizer;
+
+  vtkNew<vtkPoints> degen_points;
+  std::unordered_set<vtkIdType> optimized_cell_ids;
+  std::unordered_set<vtkIdType> failed_to_optimize_cell_ids;
 
   auto refined_mesh = refiner.Refine(mesh, cell_ids_to_refine, degen_points);
-  auto optimized_mesh = optimizer.Optimize(refined_mesh, optimized_cell_ids,
-                                           failed_to_optimize_cell_ids);
-  optimized_cell_ids.clear();
+  auto optimized_mesh = angle_optimizer.Optimize(
+      refined_mesh, optimized_cell_ids, failed_to_optimize_cell_ids);
   failed_to_optimize_cell_ids.clear();
-  auto optimized_mesh2 = optimizer.Optimize(optimized_mesh, optimized_cell_ids,
-                                            failed_to_optimize_cell_ids);
+  auto optimized_mesh2 = angle_optimizer.Optimize(
+      optimized_mesh, optimized_cell_ids, failed_to_optimize_cell_ids);
 
-  AddColor(true, refined_mesh);
-  AddColor(true, optimized_mesh2);
+  {
+    std::unordered_map<vtkIdType, std::array<float, 3>> color_map;
+    for (auto it : optimized_cell_ids) {
+      color_map[it] = {0, 100, 0};
+    }
+
+    for (auto it : failed_to_optimize_cell_ids) {
+      color_map[it] = {100, 0, 0};
+    }
+
+    AddColor(refined_mesh, color_map);
+    AddColor(optimized_mesh2, color_map);
+  }
+
+  mr::ConnectionOptimizer connection_optimizer;
+
+  optimized_cell_ids.clear();
+  std::unordered_set<vtkIdType> failed_to_optimize_point_ids;
+
+  auto connection_optimized_mesh = connection_optimizer.Optimize(
+      optimized_mesh2, optimized_cell_ids, failed_to_optimize_point_ids);
+
+  {
+    std::unordered_map<vtkIdType, std::array<float, 3>> color_map;
+    for (auto it : optimized_cell_ids) {
+      color_map[it] = {0, 100, 0};
+    }
+
+    std::unordered_map<vtkIdType, std::array<float, 3>> pt_color_map;
+    for (auto it : failed_to_optimize_point_ids) {
+      pt_color_map[it] = {100, 0, 0};
+    }
+
+    AddColor(optimized_mesh2, color_map, pt_color_map);
+    AddColor(connection_optimized_mesh, color_map, pt_color_map);
+  }
+
   {
     mr::MeshWriter writer;
     writer.Write("out.mesh", optimized_mesh2);
@@ -149,7 +196,7 @@ int main() {
     mr::GRDWriter writer;
     writer.Write("out.grd", optimized_mesh2);
   }
-  Render(refined_mesh, optimized_mesh2, degen_points);
+  Render(optimized_mesh2, connection_optimized_mesh, degen_points);
 
   return EXIT_SUCCESS;
 }
