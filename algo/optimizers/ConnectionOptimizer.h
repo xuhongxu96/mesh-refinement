@@ -3,6 +3,7 @@
 #include <vtkIdList.h>
 #include <vtkPolyData.h>
 
+#include <unordered_map>
 #include <unordered_set>
 
 namespace mr {
@@ -22,6 +23,7 @@ class ConnectionOptimizer {
  private:
   ConnectionOptimizerConfig config_;
 
-  vtkNew<vtkIdList> FindPointIdsToOptimize(vtkPolyData* input) const;
+  std::unordered_map<vtkIdType, vtkIdType> FindPointIdsWithConnectionToOptimize(
+      vtkPolyData* input) const;
 };
 }  // namespace mr
