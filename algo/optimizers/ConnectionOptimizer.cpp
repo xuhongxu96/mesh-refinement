@@ -105,7 +105,7 @@ static NeighborInfo GetNeighborInfo(vtkPolyData* input, vtkIdType point_id) {
       const vtkIdType* pts;
       input->GetCellPoints(l2_neighbor_cell_ids->GetId(i), n_pts, pts);
       for (vtkIdType j = 0; j < n_pts; ++j) {
-        if (pts[j] != res.pivot.x[j] && pts[j] != res.farest_point.x[j]) {
+        if (pts[j] != res.pivot.id && pts[j] != res.farest_point.id) {
           res.l2_points[i].id = pts[j];
           input->GetPoint(pts[j], res.l2_points[i].x);
           break;
@@ -128,7 +128,7 @@ static NeighborInfo GetNeighborInfo(vtkPolyData* input, vtkIdType point_id) {
       const vtkIdType* pts;
       input->GetCellPoints(res.l3_cell_ids[i], n_pts, pts);
       for (vtkIdType j = 0; j < n_pts; ++j) {
-        if (pts[j] != res.pivot.x[j] && pts[j] != res.l2_points[i].x[j]) {
+        if (pts[j] != res.pivot.id && pts[j] != res.l2_points[i].id) {
           res.l3_points[i].id = pts[j];
           input->GetPoint(pts[j], res.l3_points[i].x);
           break;
@@ -141,38 +141,54 @@ static NeighborInfo GetNeighborInfo(vtkPolyData* input, vtkIdType point_id) {
 }
 
 vtkNew<vtkPolyData> ConnectionOptimizer::Optimize(
-    vtkPolyData* input, std::unordered_set<vtkIdType>& optimized_cell_ids,
-    std::unordered_set<vtkIdType>& failed_point_ids) const {
+    vtkPolyData* input,
+    std::unordered_set<vtkIdType>& optimized_point_ids) const {
+  optimized_point_ids.clear();
+
   vtkNew<vtkPolyData> res;
   res->EditableOn();
   res->DeepCopy(input);
   res->BuildLinks();
 
   auto point_ids_with_connection_to_optimize =
-      FindPointIdsWithConnectionToOptimize(input);
+      FindPointIdsWithConnectionToOptimize(res);
   for (auto [point_id, connection] : point_ids_with_connection_to_optimize) {
     auto delta = connection - config_.max_connection;
 
     // For delta times
     for (int times = 0; times < delta; ++times) {
-      auto info = GetNeighborInfo(input, point_id);
+      auto info = GetNeighborInfo(res, point_id);
 
       // half-split longest edge
       double mid_point[3];
       for (int i = 0; i < 3; ++i)
         mid_point[i] = (info.farest_point.x[i] + info.pivot.x[i]) / 2.;
 
-      auto mid_point_id = input->GetPoints()->InsertNextPoint(mid_point);
+      // auto mid_point_id = res->GetPoints()->InsertNextPoint(mid_point);
+      auto mid_point_id = res->InsertNextLinkedPoint(mid_point, 0);
 
-      // TODO: replace l2 cell (pivot -> mid)
-      // TODO: replace l3 cell (pivot -> mid)
-      // TODO: new cell (mid, pivot, l3)
+      for (int i = 0; i < 2; ++i) {
+        // replace l2 cell (pivot -> mid)
+        res->RemoveReferenceToCell(info.pivot.id, info.l2_cell_ids[i]);
+        res->ReplaceCellPoint(info.l2_cell_ids[i], info.pivot.id, mid_point_id);
+        res->ResizeCellList(mid_point_id, 1);
+        res->AddReferenceToCell(mid_point_id, info.l2_cell_ids[i]);
+
+        // replace l3 cell (pivot -> mid)
+        res->RemoveReferenceToCell(info.pivot.id, info.l3_cell_ids[i]);
+        res->ReplaceCellPoint(info.l3_cell_ids[i], info.pivot.id, mid_point_id);
+        res->ResizeCellList(mid_point_id, 1);
+        res->AddReferenceToCell(mid_point_id, info.l3_cell_ids[i]);
+
+        // new cell (mid, pivot, l3)
+        vtkIdType pts[3] = {mid_point_id, info.pivot.id, info.l3_points[i].id};
+        res->InsertNextLinkedCell(VTK_TRIANGLE, 3, pts);
+      }
     }
 
-    failed_point_ids.insert(point_id);
+    optimized_point_ids.insert(point_id);
   }
 
-  res->BuildLinks();
   res->Squeeze();
   return res;
 }

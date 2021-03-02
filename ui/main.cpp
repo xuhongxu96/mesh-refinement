@@ -122,6 +122,58 @@ void Render(vtkPolyData* left_mesh, vtkPolyData* right_mesh,
   renderWindowInteractor->Start();
 }
 
+vtkSmartPointer<vtkPolyData> OptimizeAngle(vtkPolyData* input, int times) {
+  static mr::AngleOptimizer angle_optimizer;
+
+  std::unordered_set<vtkIdType> optimized_cell_ids;
+  std::unordered_set<vtkIdType> failed_to_optimize_cell_ids;
+
+  vtkSmartPointer<vtkPolyData> res = input;
+  for (int angle_optimize_times = 0; angle_optimize_times < times;
+       ++angle_optimize_times) {
+    failed_to_optimize_cell_ids.clear();
+    res = angle_optimizer.Optimize(res, optimized_cell_ids,
+                                   failed_to_optimize_cell_ids);
+  }
+
+  {
+    std::unordered_map<vtkIdType, std::array<float, 3>> color_map;
+    for (auto it : optimized_cell_ids) {
+      color_map[it] = {0, 100, 0};
+    }
+
+    for (auto it : failed_to_optimize_cell_ids) {
+      color_map[it] = {100, 0, 0};
+    }
+
+    AddColor(input, color_map);
+    AddColor(res, color_map);
+  }
+
+  return res;
+}
+
+vtkSmartPointer<vtkPolyData> OptimizeConnection(vtkPolyData* input) {
+  std::unordered_set<vtkIdType> optimized_point_ids;
+
+  static mr::ConnectionOptimizer connection_optimizer;
+
+  vtkSmartPointer<vtkPolyData> res =
+      connection_optimizer.Optimize(input, optimized_point_ids);
+
+  {
+    std::unordered_map<vtkIdType, std::array<float, 3>> pt_color_map;
+    for (auto it : optimized_point_ids) {
+      pt_color_map[it] = {100, 0, 0};
+    }
+
+    AddColor(input, {}, pt_color_map);
+    AddColor(res, {}, pt_color_map);
+  }
+
+  return res;
+}
+
 int main() {
   vtkNew<vtkSimplePointsReader> point_reader;
   point_reader->SetFileName(DATA_PATH "vectors.txt");
@@ -137,66 +189,31 @@ int main() {
   mr::DelaunayRefiner refiner(
       std::make_shared<mr::IDW>(point_reader->GetOutput()));
 
-  mr::AngleOptimizer angle_optimizer;
-
   vtkNew<vtkPoints> degen_points;
-  std::unordered_set<vtkIdType> optimized_cell_ids;
-  std::unordered_set<vtkIdType> failed_to_optimize_cell_ids;
 
+  // Refine
   auto refined_mesh = refiner.Refine(mesh, cell_ids_to_refine, degen_points);
-  auto optimized_mesh = angle_optimizer.Optimize(
-      refined_mesh, optimized_cell_ids, failed_to_optimize_cell_ids);
-  failed_to_optimize_cell_ids.clear();
-  auto optimized_mesh2 = angle_optimizer.Optimize(
-      optimized_mesh, optimized_cell_ids, failed_to_optimize_cell_ids);
 
-  {
-    std::unordered_map<vtkIdType, std::array<float, 3>> color_map;
-    for (auto it : optimized_cell_ids) {
-      color_map[it] = {0, 100, 0};
-    }
+  auto res1 = OptimizeAngle(refined_mesh, 2);
+  auto res2 = OptimizeConnection(res1);
+  auto res3 = OptimizeAngle(res2, 1);
+  auto res4 = OptimizeConnection(res3);
+  auto res5 = OptimizeAngle(res4, 1);
 
-    for (auto it : failed_to_optimize_cell_ids) {
-      color_map[it] = {100, 0, 0};
-    }
-
-    AddColor(refined_mesh, color_map);
-    AddColor(optimized_mesh2, color_map);
-  }
-
-  mr::ConnectionOptimizer connection_optimizer;
-
-  optimized_cell_ids.clear();
-  std::unordered_set<vtkIdType> failed_to_optimize_point_ids;
-
-  auto connection_optimized_mesh = connection_optimizer.Optimize(
-      optimized_mesh2, optimized_cell_ids, failed_to_optimize_point_ids);
-
-  {
-    std::unordered_map<vtkIdType, std::array<float, 3>> color_map;
-    for (auto it : optimized_cell_ids) {
-      color_map[it] = {0, 100, 0};
-    }
-
-    std::unordered_map<vtkIdType, std::array<float, 3>> pt_color_map;
-    for (auto it : failed_to_optimize_point_ids) {
-      pt_color_map[it] = {100, 0, 0};
-    }
-
-    AddColor(optimized_mesh2, color_map, pt_color_map);
-    AddColor(connection_optimized_mesh, color_map, pt_color_map);
-  }
+  vtkPolyData* left = res4;
+  vtkPolyData* right = res5;
 
   {
     mr::MeshWriter writer;
-    writer.Write("out.mesh", optimized_mesh2);
+    writer.Write("out.mesh", right);
   }
 
   {
     mr::GRDWriter writer;
-    writer.Write("out.grd", optimized_mesh2);
+    writer.Write("out.grd", right);
   }
-  Render(optimized_mesh2, connection_optimized_mesh, degen_points);
+
+  Render(left, right, degen_points);
 
   return EXIT_SUCCESS;
 }

@@ -17,8 +17,8 @@ class ConnectionOptimizer {
   ConnectionOptimizer(ConnectionOptimizerConfig config = {});
 
   vtkNew<vtkPolyData> Optimize(
-      vtkPolyData* input, std::unordered_set<vtkIdType>& optimized_cell_ids,
-      std::unordered_set<vtkIdType>& failed_point_ids) const;
+      vtkPolyData* input,
+      std::unordered_set<vtkIdType>& optimized_point_ids) const;
 
  private:
   ConnectionOptimizerConfig config_;
