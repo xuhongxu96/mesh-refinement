@@ -28,6 +28,10 @@ void MouseInteractorStyle::OnLeftButtonDown() {
   auto mesh = this->DataMap[this->GetCurrentRenderer()];
 
   if (picker->GetCellId() != -1) {
+    vtkIdType n_pts;
+    const vtkIdType* pts;
+    mesh->GetCellPoints(picker->GetCellId(), n_pts, pts);
+
     vtkNew<vtkIdTypeArray> ids;
 
     ids->SetNumberOfComponents(1);
@@ -57,10 +61,14 @@ void MouseInteractorStyle::OnLeftButtonDown() {
     std::cout << "There are " << selected->GetNumberOfPoints()
               << " points in the selection." << std::endl;
 
+    std::cout << "Point Ids: " << std::endl;
+    for (int i = 0; i < 3; ++i) std::cout << pts[i] << " ";
+    std::cout << std::endl;
+
     std::cout.precision(8);
     std::cout.setf(std::ios::fixed);
 
-    // Output angles
+    std::cout << "Point XYZs: " << std::endl;
     double p[3][3];
     for (int i = 0; i < 3; ++i)
       for (int j = 0; j < 3; ++j)
@@ -75,6 +83,7 @@ void MouseInteractorStyle::OnLeftButtonDown() {
       vec[i][2] = 0;  // calculate angle in 2d only
     }
 
+    std::cout << "Angles: " << std::endl;
     for (int i = 0; i < 3; ++i) {
       double current_radian = vtkMath::Pi() - vtkMath::AngleBetweenVectors(
                                                   vec[i], vec[(i + 1) % 3]);

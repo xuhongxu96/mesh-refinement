@@ -2,6 +2,7 @@
 
 #include <vtkMath.h>
 
+#include <iostream>
 #include <optional>
 #include <unordered_set>
 
@@ -157,8 +158,13 @@ vtkNew<vtkPolyData> AngleOptimizer::Optimize(
   auto cell_edges = FindCellEdgeWithBigAngle(res, max_radian);
 
   for (auto& [cell_id, info] : cell_edges) {
+    if (optimized_cell_ids.find(cell_id) != optimized_cell_ids.end()) continue;
+
     vtkNew<vtkIdList> nei_cell_ids;
     res->GetCellEdgeNeighbors(cell_id, info.p1_id, info.p2_id, nei_cell_ids);
+    if (cell_id == 188788) {
+      std::cout << "a" << std::endl;
+    }
     switch (nei_cell_ids->GetNumberOfIds()) {
       case 0:
         // edge cell, directly split the edge
@@ -196,6 +202,9 @@ vtkNew<vtkPolyData> AngleOptimizer::Optimize(
           vtkIdType nei_cell_id = nei_cell_ids->GetId(0);
           vtkIdType nei_point_id =
               GetOppositePointId(res, nei_cell_id, info.p1_id, info.p2_id);
+
+          if (optimized_cell_ids.find(nei_cell_id) != optimized_cell_ids.end())
+            continue;
 
           bool succ = true;
 
@@ -238,8 +247,7 @@ vtkNew<vtkPolyData> AngleOptimizer::Optimize(
               res->ReplaceCell(cell_id, 3, new_point_ids);
               res->ResizeCellList(mid_p_id, 1);
               res->AddReferenceToCell(mid_p_id, cell_id);
-              //     optimized_cell_ids.insert(cell_id);
-              failed_cell_ids.insert(cell_id);
+              optimized_cell_ids.insert(cell_id);
             }
 
             {
@@ -247,8 +255,7 @@ vtkNew<vtkPolyData> AngleOptimizer::Optimize(
                                             mid_p_id};
               vtkIdType new_cell_id =
                   res->InsertNextLinkedCell(VTK_POLYGON, 3, new_point_ids);
-              // optimized_cell_ids.insert(new_cell_id);
-              failed_cell_ids.insert(new_cell_id);
+              optimized_cell_ids.insert(new_cell_id);
             }
 
             {
@@ -257,20 +264,17 @@ vtkNew<vtkPolyData> AngleOptimizer::Optimize(
               res->ReplaceCell(nei_cell_id, 3, new_point_ids);
               res->ResizeCellList(mid_p_id, 1);
               res->AddReferenceToCell(mid_p_id, nei_cell_id);
-              // optimized_cell_ids.insert(nei_cell_id);
-              failed_cell_ids.insert(nei_cell_id);
+              optimized_cell_ids.insert(nei_cell_id);
             }
 
             {
               vtkIdType new_point_ids[3] = {nei_point_id, info.p2_id, mid_p_id};
               vtkIdType new_cell_id =
                   res->InsertNextLinkedCell(VTK_POLYGON, 3, new_point_ids);
-              // optimized_cell_ids.insert(new_cell_id);
-              failed_cell_ids.insert(new_cell_id);
+              optimized_cell_ids.insert(new_cell_id);
             }
           }
         }
-        // failed_cell_ids.insert(cell_id);
         break;
       default:
         // throw std::runtime_error("neighbor cannot be greater than 1");

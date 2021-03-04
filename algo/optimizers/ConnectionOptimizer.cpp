@@ -3,6 +3,7 @@
 #include <vtkMath.h>
 
 #include <array>
+#include <optional>
 
 namespace mr {
 struct PointInfo {
@@ -65,37 +66,14 @@ static id_point_map_t FindNeighborPoints(vtkPolyData* mesh,
   return res;
 }
 
-static NeighborInfo GetNeighborInfo(vtkPolyData* input, vtkIdType point_id) {
-  NeighborInfo res;
-
-  res.pivot.id = point_id;
-  input->GetPoint(point_id, res.pivot.x);
-
-  auto neighbor_points = FindNeighborPoints(input, point_id);
-
-  // Find longest edge
-  double max_distance = 0;
-  for (auto& [neighbor_point_id, neighbor_point] : neighbor_points) {
-    auto distance =
-        vtkMath::Distance2BetweenPoints(res.pivot.x, neighbor_point.data());
-    if (max_distance <= distance) {
-      max_distance = distance;
-      res.farest_point.id = neighbor_point_id;
-      for (int i = 0; i < 3; ++i) res.farest_point.x[i] = neighbor_point[i];
-    }
-  }
-
-  if (res.farest_point.id == -1 || max_distance == 0) {
-    throw std::runtime_error("Failed to find longest edge (shouldn't happen)");
-  }
-
+static bool GetNeighborInfo(vtkPolyData* input, vtkIdType point_id,
+                            vtkIdType nei_point_id, NeighborInfo& res) {
   {
     vtkNew<vtkIdList> l2_neighbor_cell_ids;
-    input->GetCellEdgeNeighbors(-1, point_id, res.farest_point.id,
+    input->GetCellEdgeNeighbors(-1, point_id, nei_point_id,
                                 l2_neighbor_cell_ids);
 
-    if (l2_neighbor_cell_ids->GetNumberOfIds() != 2)
-      throw std::runtime_error("Should have exactly 2 l2_neighbor_cells");
+    if (l2_neighbor_cell_ids->GetNumberOfIds() != 2) return false;
 
     for (int i = 0; i < 2; ++i)
       res.l2_cell_ids[i] = l2_neighbor_cell_ids->GetId(i);
@@ -105,7 +83,7 @@ static NeighborInfo GetNeighborInfo(vtkPolyData* input, vtkIdType point_id) {
       const vtkIdType* pts;
       input->GetCellPoints(l2_neighbor_cell_ids->GetId(i), n_pts, pts);
       for (vtkIdType j = 0; j < n_pts; ++j) {
-        if (pts[j] != res.pivot.id && pts[j] != res.farest_point.id) {
+        if (pts[j] != res.pivot.id && pts[j] != nei_point_id) {
           res.l2_points[i].id = pts[j];
           input->GetPoint(pts[j], res.l2_points[i].x);
           break;
@@ -119,8 +97,7 @@ static NeighborInfo GetNeighborInfo(vtkPolyData* input, vtkIdType point_id) {
       vtkNew<vtkIdList> l3_neighbor_cell_ids;
       input->GetCellEdgeNeighbors(res.l2_cell_ids[i], point_id,
                                   res.l2_points[i].id, l3_neighbor_cell_ids);
-      if (l3_neighbor_cell_ids->GetNumberOfIds() != 1)
-        throw std::runtime_error("Should have exactly 1 l3_neighbor_cells");
+      if (l3_neighbor_cell_ids->GetNumberOfIds() != 1) return false;
 
       res.l3_cell_ids[i] = l3_neighbor_cell_ids->GetId(0);
 
@@ -135,6 +112,34 @@ static NeighborInfo GetNeighborInfo(vtkPolyData* input, vtkIdType point_id) {
         }
       }
     }
+  }
+
+  return true;
+}
+
+static NeighborInfo GetNeighborInfo(vtkPolyData* input, vtkIdType point_id) {
+  NeighborInfo res;
+
+  res.pivot.id = point_id;
+  input->GetPoint(point_id, res.pivot.x);
+
+  auto neighbor_points = FindNeighborPoints(input, point_id);
+
+  // Find longest edge
+  double max_distance = 0;
+  for (auto& [neighbor_point_id, neighbor_point] : neighbor_points) {
+    auto distance =
+        vtkMath::Distance2BetweenPoints(res.pivot.x, neighbor_point.data());
+    if (max_distance <= distance &&
+        GetNeighborInfo(input, point_id, neighbor_point_id, res)) {
+      max_distance = distance;
+      res.farest_point.id = neighbor_point_id;
+      for (int i = 0; i < 3; ++i) res.farest_point.x[i] = neighbor_point[i];
+    }
+  }
+
+  if (res.farest_point.id == -1 || max_distance == 0) {
+    throw std::runtime_error("Failed to find longest edge (shouldn't happen)");
   }
 
   return res;
@@ -182,7 +187,11 @@ vtkNew<vtkPolyData> ConnectionOptimizer::Optimize(
 
         // new cell (mid, pivot, l3)
         vtkIdType pts[3] = {mid_point_id, info.pivot.id, info.l3_points[i].id};
-        res->InsertNextLinkedCell(VTK_TRIANGLE, 3, pts);
+        auto new_cell_id = res->InsertNextLinkedCell(VTK_TRIANGLE, 3, pts);
+
+        if (new_cell_id == 188921) {
+          // std::cout << "a" << info.pivot.id << std::endl;
+        }
       }
     }
 

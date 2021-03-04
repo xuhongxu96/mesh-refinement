@@ -25,6 +25,9 @@
 
 #include "MouseInteractorStyle.h"
 
+static std::unordered_set<vtkIdType> highlight_cell_ids;
+static std::unordered_set<vtkIdType> highlight_point_ids;
+
 void AddColor(vtkPolyData* res,
               const std::unordered_map<vtkIdType, std::array<float, 3>>&
                   cell_color_map = {},
@@ -35,27 +38,35 @@ void AddColor(vtkPolyData* res,
   colors->SetNumberOfTuples(res->GetNumberOfCells());
 
   for (size_t i = 0; i < res->GetNumberOfCells(); ++i) {
-    if (auto it = cell_color_map.find(i); it != cell_color_map.end()) {
+    bool is_point_color_mapped = false;
+
+    vtkIdType n_pts;
+    const vtkIdType* pts;
+    res->GetCellPoints(i, n_pts, pts);
+    for (vtkIdType j = 0; j < n_pts; ++j) {
+      if (highlight_point_ids.find(pts[j]) != highlight_point_ids.end()) {
+        is_point_color_mapped = true;
+        colors->InsertTuple(i, std::array<float, 3>{155, 30, 255}.data());
+        break;
+      } else if (auto it = point_color_map.find(pts[j]);
+                 it != point_color_map.end()) {
+        is_point_color_mapped = true;
+        colors->InsertTuple(i, it->second.data());
+        break;
+      }
+    }
+
+    if (is_point_color_mapped) {
+      continue;
+    }
+
+    if (highlight_cell_ids.find(i) != highlight_cell_ids.end()) {
+      colors->InsertTuple(i, std::array<float, 3>{155, 30, 255}.data());
+    } else if (auto it = cell_color_map.find(i); it != cell_color_map.end()) {
       colors->InsertTuple(i, it->second.data());
     } else {
-      bool is_point_color_mapped = false;
-
-      vtkIdType n_pts;
-      const vtkIdType* pts;
-      res->GetCellPoints(i, n_pts, pts);
-      for (vtkIdType j = 0; j < n_pts; ++j) {
-        if (auto it = point_color_map.find(pts[j]);
-            it != point_color_map.end()) {
-          is_point_color_mapped = true;
-          colors->InsertTuple(i, it->second.data());
-          break;
-        }
-      }
-
-      if (!is_point_color_mapped) {
-        float rgb[3] = {0, 0, 100};
-        colors->InsertTuple(i, rgb);
-      }
+      float rgb[3] = {0, 0, 100};
+      colors->InsertTuple(i, rgb);
     }
   }
 
@@ -174,34 +185,55 @@ vtkSmartPointer<vtkPolyData> OptimizeConnection(vtkPolyData* input) {
   return res;
 }
 
-int main() {
-  vtkNew<vtkSimplePointsReader> point_reader;
-  point_reader->SetFileName(DATA_PATH "vectors.txt");
-  point_reader->Update();
+static auto point_reader = ([] {
+  vtkNew<vtkSimplePointsReader> res;
 
+  res->SetFileName(DATA_PATH "vectors.txt");
+  res->Update();
+  return res;
+})();
+
+vtkSmartPointer<vtkPolyData> Refine(vtkPolyData* mesh,
+                                    vtkNew<vtkPoints>& degen_points) {
+  static auto refiner = ([&] {
+    return mr::DelaunayRefiner(
+        std::make_shared<mr::IDW>(point_reader->GetOutput()));
+  })();
+
+  static mr::RefineJudger judger(point_reader->GetOutput());
+  auto cell_ids_to_refine = judger.FindCellsToRefine(mesh);
+
+  return refiner.Refine(mesh, cell_ids_to_refine, degen_points);
+}
+
+int main() {
   mr::MeshReader mesh_reader;
   auto mesh = mesh_reader.Read(DATA_PATH "original.mesh");
   AddColor(mesh);
 
-  mr::RefineJudger judger(point_reader->GetOutput());
-  auto cell_ids_to_refine = judger.FindCellsToRefine(mesh);
-
-  mr::DelaunayRefiner refiner(
-      std::make_shared<mr::IDW>(point_reader->GetOutput()));
-
   vtkNew<vtkPoints> degen_points;
 
   // Refine
-  auto refined_mesh = refiner.Refine(mesh, cell_ids_to_refine, degen_points);
+  auto refined_mesh = Refine(mesh, degen_points);
 
   auto res1 = OptimizeAngle(refined_mesh, 2);
   auto res2 = OptimizeConnection(res1);
-  auto res3 = OptimizeAngle(res2, 1);
-  auto res4 = OptimizeConnection(res3);
-  auto res5 = OptimizeAngle(res4, 1);
+  for (int i = 0; i < 1; ++i) {
+    res1 = OptimizeAngle(res2, 1);
+    res2 = OptimizeConnection(res1);
+  }
+  refined_mesh = OptimizeAngle(res2, 1);
 
-  vtkPolyData* left = res4;
-  vtkPolyData* right = res5;
+  res2 = Refine(res1, degen_points);
+
+  for (int i = 0; i < 4; ++i) {
+    res1 = OptimizeAngle(res2, 1);
+    res2 = OptimizeConnection(res1);
+  }
+  res1 = OptimizeAngle(res2, 1);
+
+  vtkPolyData* left = refined_mesh;
+  vtkPolyData* right = res1;
 
   {
     mr::MeshWriter writer;
