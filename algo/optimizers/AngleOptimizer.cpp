@@ -162,9 +162,6 @@ vtkNew<vtkPolyData> AngleOptimizer::Optimize(
 
     vtkNew<vtkIdList> nei_cell_ids;
     res->GetCellEdgeNeighbors(cell_id, info.p1_id, info.p2_id, nei_cell_ids);
-    if (cell_id == 188788) {
-      std::cout << "a" << std::endl;
-    }
     switch (nei_cell_ids->GetNumberOfIds()) {
       case 0:
         // edge cell, directly split the edge

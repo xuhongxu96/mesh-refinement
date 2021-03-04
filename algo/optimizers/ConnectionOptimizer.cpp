@@ -188,10 +188,6 @@ vtkNew<vtkPolyData> ConnectionOptimizer::Optimize(
         // new cell (mid, pivot, l3)
         vtkIdType pts[3] = {mid_point_id, info.pivot.id, info.l3_points[i].id};
         auto new_cell_id = res->InsertNextLinkedCell(VTK_TRIANGLE, 3, pts);
-
-        if (new_cell_id == 188921) {
-          // std::cout << "a" << info.pivot.id << std::endl;
-        }
       }
     }
 
