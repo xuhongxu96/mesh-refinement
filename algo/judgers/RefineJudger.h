@@ -20,6 +20,9 @@ struct RefineJudgerConfig {
   //!
   //! 面积小于该面积的三角形将不再细分
   double min_triangle_area = 50.0;
+
+  //! @brief 是否细分边缘
+  bool refine_edge = false;
 };
 
 class RefineJudger {

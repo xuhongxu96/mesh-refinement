@@ -193,14 +193,17 @@ static auto point_reader = ([] {
   return res;
 })();
 
-vtkSmartPointer<vtkPolyData> Refine(vtkPolyData* mesh,
+vtkSmartPointer<vtkPolyData> Refine(vtkPolyData* mesh, bool refine_edge,
                                     vtkNew<vtkPoints>& degen_points) {
   static auto refiner = ([&] {
     return mr::DelaunayRefiner(
         std::make_shared<mr::IDW>(point_reader->GetOutput()));
   })();
 
-  static mr::RefineJudger judger(point_reader->GetOutput());
+  mr::RefineJudgerConfig cfg;
+  cfg.refine_edge = refine_edge;
+  mr::RefineJudger judger(point_reader->GetOutput(), cfg);
+
   auto cell_ids_to_refine = judger.FindCellsToRefine(mesh);
 
   return refiner.Refine(mesh, cell_ids_to_refine, degen_points);
@@ -214,7 +217,7 @@ int main() {
   vtkNew<vtkPoints> degen_points;
 
   // Refine
-  auto refined_mesh = Refine(mesh, degen_points);
+  auto refined_mesh = Refine(mesh, true, degen_points);
 
   auto res1 = OptimizeAngle(refined_mesh, 2);
   auto res2 = OptimizeConnection(res1);
@@ -224,7 +227,7 @@ int main() {
   }
   refined_mesh = OptimizeAngle(res2, 1);
 
-  res2 = Refine(res1, degen_points);
+  res2 = Refine(res1, false, degen_points);
 
   for (int i = 0; i < 4; ++i) {
     res1 = OptimizeAngle(res2, 1);
