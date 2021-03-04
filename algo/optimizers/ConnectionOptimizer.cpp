@@ -130,8 +130,10 @@ static NeighborInfo GetNeighborInfo(vtkPolyData* input, vtkIdType point_id) {
   for (auto& [neighbor_point_id, neighbor_point] : neighbor_points) {
     auto distance =
         vtkMath::Distance2BetweenPoints(res.pivot.x, neighbor_point.data());
+    NeighborInfo temp = res;
     if (max_distance <= distance &&
-        GetNeighborInfo(input, point_id, neighbor_point_id, res)) {
+        GetNeighborInfo(input, point_id, neighbor_point_id, temp)) {
+      res = temp;
       max_distance = distance;
       res.farest_point.id = neighbor_point_id;
       for (int i = 0; i < 3; ++i) res.farest_point.x[i] = neighbor_point[i];

@@ -7,14 +7,14 @@ namespace mr {
 
 struct RefineJudgerConfig {
   //! @brief 判断是否需要细分的半径（以当前判断的点为中心）
-  double judge_radius = 30.0;
+  double judge_radius = 20.0;
 
   //! @brief z值差阈值
   //!
   //! 如果存在一个judge_radius半径内的点，
   //! 其z值与判断中心点的差值超过该阈值，
   //! 则需要细分与该判断中心点相关联的三角形
-  double delta_z_threshold = 1;
+  double delta_z_threshold = 2;
 
   //! @brief 细分后的三角形最小面积
   //!
