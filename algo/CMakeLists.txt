@@ -28,6 +28,8 @@ add_library(algo STATIC
     io/MeshReader.cpp
     io/MeshWriter.h
     io/MeshWriter.cpp
+    io/GRDReader.h
+    io/GRDReader.cpp
     io/GRDWriter.h
     io/GRDWriter.cpp
 )
